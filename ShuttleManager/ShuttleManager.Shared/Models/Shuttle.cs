@@ -8,7 +8,7 @@ namespace ShuttleManager.Shared.Models;
 
 public class Shuttle
 {
-    public int ShuttleNumber { get; set; } = 0;
+    public string ShuttleNumber { get; set; } = "";
     public string? IPAddress { get; set; } = string.Empty;
     public int BatteryPercentage { get; set; } = 0;
     public bool IsAutoLogging { get; set; }

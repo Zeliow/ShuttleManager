@@ -11,108 +11,210 @@
 
 <div class="container-fluid">
     <h3>Панель управления шаттлами</h3>
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5>Сканирование сети</h5>
-        </div>
-        <div class="card-body">
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label for="baseIp" class="form-label">Базовый IP:</label>
-                    <InputText id="baseIp" @bind-Value="BaseIp" class="form-control" placeholder="192.168.40" />
-                </div>
-                <div class="col-md-6">
-                    <label for="port" class="form-label">Порт:</label>
-                    <InputNumber id="port" @bind-Value="Port" class="form-control" min="1" max="65535" />
-                </div>
-            </div>
-            <button @onclick="StartScan" class="btn btn-primary w-100 mb-3" disabled="@IsScanning">
-                @(IsScanning ? "Сканирование..." : "Найти устройства")
-            </button>
-
-            @if (IsScanning)
-            {
-                <div class="alert alert-info">
-                    <div class="spinner-border spinner-border-sm" role="status"></div>
-                    Поиск на @(BaseIp).@(StartRange)-@(EndRange):@(Port)...
-                </div>
-            }
-
-            @if (FoundDevices.Any())
-            {
-                <div>
-                    <h6>Найденные устройства:</h6>
-                    <ul class="list-group list-group-flush">
-                        @foreach (var ip in FoundDevices)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                @ip.ToString()
-                                <button class="btn btn-sm btn-outline-success"
-                                        @onclick="() => ConnectToShuttle(ip.ToString())"
-                                        disabled="@IsAlreadyConnected(ip.ToString())">
-                                    @(IsAlreadyConnected(ip.ToString()) ? "Подключен" : "Подключить")
-                                </button>
-                            </li>
-                        }
-                    </ul>
-                </div>
-            }
-            else if (ScanCompleted && !IsScanning && !FoundDevices.Any())
-            {
-                <div class="alert alert-secondary">
-                    Устройства не найдены.
-                </div>
-            }
-        </div>
-    </div>
 
     <div class="row">
-        @foreach (var shuttle in _connectedShuttles)
-        {
-            <div class="mb-3">
-                <ShuttleHubControlComponent Shuttle="shuttle"
-                                            OnDisconnected="OnShuttleDisconnected" />
-            </div>
-        }
-    </div>
+        <!-- Левая колонка: Сканер и список найденных устройств -->
+        <div class="col-md-3">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>Сканирование сети</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="baseIp" class="form-label">Базовый IP:</label>
+                            <InputText id="baseIp" @bind-Value="BaseIp" class="form-control" placeholder="192.168.40" />
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="port" class="form-label">Порт:</label>
+                            <InputNumber id="port" @bind-Value="Port" class="form-control" min="1" max="65535" />
+                        </div>
+                    </div>
+                    <button @onclick="StartScan" class="btn btn-primary w-100 mb-3" disabled="@IsScanning">
+                        @(IsScanning ? "Сканирование..." : "Найти устройства")
+                    </button>
 
-    @if (!_connectedShuttles.Any())
-    {
-        <div class="alert alert-info">
-            Подключенных шаттлов нет. Используйте сканер для поиска и подключения.
+                    @if (IsScanning)
+                    {
+                        <div class="alert alert-info">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            Поиск на @(BaseIp).@(StartRange)-@(EndRange):@(Port)...
+                        </div>
+                    }
+
+                    @if (FoundDevices.Any())
+                    {
+                        <div>
+                            <h6>Найденные устройства:</h6>
+                            <ul class="list-group list-group-flush">
+                                @foreach (var ip in FoundDevices)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        @ip.ToString()
+                                        <button class="btn btn-sm btn-outline-success"
+                                                @onclick="() => HandleConnectClickIfNotConnected(ip.ToString())"
+                                                disabled="@IsAlreadyConnected(ip.ToString())">
+                                            @(IsAlreadyConnected(ip.ToString()) ? "Подключен" : "Подключить")
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    else if (ScanCompleted && !IsScanning && !FoundDevices.Any())
+                    {
+                        <div class="alert alert-secondary">
+                            Устройства не найдены.
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Список подключенных устройств -->
+            @if (_connectedShuttles.Any())
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Подключенные устройства</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group list-group-flush">
+                            @foreach (var shuttle in _connectedShuttles)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>@* Шаттл № @SeeCorrentNumberShuttle(shuttle.ShuttleNumber) *@ (@shuttle.IPAddress)</span>
+                                    <button class="btn btn-sm btn-danger"
+                                            @onclick="() => DisconnectShuttle(shuttle.IPAddress)">
+                                        <i class="bi bi-power">Отключить</i>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
         </div>
-    }
+
+        <!-- Правая колонка: Вкладки с подключенными устройствами -->
+        <div class="col-md-9">
+            @if (_connectedShuttles.Any())
+            {
+                <!-- Навигация по вкладкам -->
+                <ul class="nav nav-tabs mb-3">
+                    @for (int i = 0; i < _connectedShuttles.Count; i++)
+                    {
+                        var shuttle = _connectedShuttles[i];
+                        <li class="nav-item">
+                            <a class="nav-link @(i == ActiveTabIndex ? "active" : "")"
+                               href="#" @onclick="() => SelectShuttle(i)">
+                                Шаттл №@SeeCorrentNumberShuttle(shuttle.ShuttleNumber)
+                                @if (shuttle.IsConnected)
+                                {
+                                    <span class="badge bg-success">●</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning">●</span>
+                                }
+                            </a>
+                        </li>
+                    }
+                </ul>
+
+                <!-- Контент активной вкладки -->
+                @if (ActiveTabIndex >= 0 && ActiveTabIndex < _connectedShuttles.Count)
+                {
+                    var activeShuttle = _connectedShuttles[ActiveTabIndex];
+                    <div class="tab-content">
+                        <div class="tab-pane active">
+                            <ShuttleHubControlComponent Shuttle="activeShuttle"
+                                                        OnDisconnected="OnShuttleDisconnected" />
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <!-- Пустое состояние правой колонки -->
+                <div class="alert alert-info text-center" style="margin-top: 50px;">
+                    <h5>Нет подключенных устройств</h5>
+                    <p>Подключите устройство через сканер слева для управления.</p>
+                </div>
+            }
+        </div>
+    </div>
 </div>
 
 @code {
     private string BaseIp = "192.168.40";
-    private int Port = 3333;
-    private int StartRange = 1;
-    private int EndRange = 254;
+    private int Port = 23;
+    private int StartRange = 130;
+    private int EndRange = 196;
     private bool IsScanning = false;
     private bool ScanCompleted = false;
     private List<IPAddress> FoundDevices = new();
     private List<Shuttle> _connectedShuttles = new();
+    private int ActiveTabIndex = -1;
     private Timer? _cleanupTimer;
+    private string[] shuttleNums = { "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32" };
+    private bool clickedShuttle = false;
 
     protected override async Task OnInitializedAsync()
     {
-        // Подписываемся только на события подключения/отключения для управления списком
+        await StartScan();
         HubClientService.Connected += OnShuttleConnected;
         HubClientService.Disconnected += OnShuttleDisconnected;
-
         await RefreshConnectedShuttles();
 
-        // Запускаем таймер для периодической очистки
         _cleanupTimer = new Timer(async _ => await CleanupDisconnectedShuttles(),
             null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
+    private async Task HandleConnectClickIfNotConnected(string ipAddress)
+    {
+        
+        // Проверяем, подключено ли устройство *сейчас*, чтобы избежать действия, если состояние изменилось между рендером и кликом
+        {
+            // Выполняем подключение
+            await HubClientService.ConnectToShuttleAsync(ipAddress, Port);
+            StateHasChanged();
+            // if (success)
+            // {
+            //     Debug.WriteLine($"[INFO] Запрошено подключение к {ipAddress}\n");
+            // }
+            // else
+            // {
+            //     Debug.WriteLine($"[ERROR] Не удалось инициировать подключение к {ipAddress}\n");
+            // }
+        }
+        // Если isConnected == true, метод просто завершает работу, ничего не делая
+    }
+
+
     private async Task RefreshConnectedShuttles()
     {
         var connectedShuttles = HubClientService.GetConnectedShuttles();
-        _connectedShuttles = connectedShuttles;
+        _connectedShuttles = connectedShuttles.ToList();
+        if (_connectedShuttles.Any() && ActiveTabIndex == -1)
+        {
+            ActiveTabIndex = 0;
+        }
         StateHasChanged();
+    }
+
+    private string SeeCorrentNumberShuttle(string numberShuttle)
+    {
+        if (char.IsDigit(numberShuttle[0]))
+        {
+            return numberShuttle;
+        }
+        else
+        {
+            return numberShuttle.Substring(1);
+        }
     }
 
     private async Task CleanupDisconnectedShuttles()
@@ -122,7 +224,6 @@
             var currentShuttles = HubClientService.GetConnectedShuttles();
             var currentIpAddresses = currentShuttles.Select(s => s.IPAddress).ToHashSet();
 
-            // Удаляем шаттлы, которых нет в текущем списке подключений
             var shuttlesToRemove = _connectedShuttles
                 .Where(s => !currentIpAddresses.Contains(s.IPAddress))
                 .ToList();
@@ -133,6 +234,17 @@
                 {
                     _connectedShuttles.Remove(shuttle);
                 }
+
+                // Обновляем индекс активной вкладки
+                if (ActiveTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
+                {
+                    ActiveTabIndex = _connectedShuttles.Count - 1;
+                }
+                else if (!_connectedShuttles.Any())
+                {
+                    ActiveTabIndex = -1;
+                }
+
                 StateHasChanged();
             }
         });
@@ -163,36 +275,46 @@
         }
     }
 
-    private async Task ConnectToShuttle(string ipAddress)
+    // private async Task ConnectToShuttle(string ipAddress)
+    // {
+    //     await HubClientService.ConnectToShuttleAsync(ipAddress, Port);
+    //     StateHasChanged();
+    //     // if (success)
+    //     // {
+    //     //     Debug.WriteLine($"[INFO] Запрошено подключение к {ipAddress}\n");
+    //     // }
+    //     // else
+    //     // {
+    //     //     Debug.WriteLine($"[ERROR] Не удалось инициировать подключение к {ipAddress}\n");
+    //     // }
+    // }
+
+    private async Task DisconnectShuttle(string ipAddress)
     {
-        bool success = await HubClientService.ConnectToShuttleAsync(ipAddress, Port);
-        if (success)
-        {
-            // НЕ добавляем шаттл здесь - дождемся события OnShuttleConnected
-            // Это предотвратит дублирование карточек
-            Debug.WriteLine($"[INFO] Запрошено подключение к {ipAddress}\n");
-        }
-        else
-        {
-            Debug.WriteLine($"[ERROR] Не удалось инициировать подключение к {ipAddress}\n");
-        }
+        HubClientService.DisconnectFromShuttle(ipAddress);
+        Debug.WriteLine($"[INFO] Запрошено отключение от {ipAddress}\n");
     }
 
     private void OnShuttleConnected(string ipAddress, int shuttleId)
     {
         InvokeAsync(() =>
         {
-            // Добавляем только если еще нет в списке
             if (!_connectedShuttles.Any(s => s.IPAddress == ipAddress))
             {
-                _connectedShuttles.Add(new Shuttle
+                var newShuttle = new Shuttle
                 {
                     IPAddress = ipAddress,
                     IsConnected = true,
                     ConnectionTime = DateTime.Now,
                     LastActivity = DateTime.Now,
-                    ShuttleNumber = shuttleId
-                });
+                    ShuttleNumber = shuttleNums[(int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131)],
+                    
+                };
+
+                _connectedShuttles.Add(newShuttle);
+
+                // Переключаемся на новую вкладку
+                ActiveTabIndex = _connectedShuttles.Count - 1;
                 StateHasChanged();
                 Debug.WriteLine($"[SUCCESS] Подключен шаттл {ipAddress} (ID: {shuttleId})\n");
             }
@@ -203,12 +325,32 @@
     {
         InvokeAsync(() =>
         {
-            int removedCount = _connectedShuttles.RemoveAll(s => s.IPAddress == ipAddress);
-            if (removedCount > 0)
+            int index = _connectedShuttles.FindIndex(s => s.IPAddress == ipAddress);
+            if (index >= 0)
             {
+                _connectedShuttles.RemoveAt(index);
+
+                // Обновляем индекс активной вкладки
+                if (ActiveTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
+                {
+                    ActiveTabIndex = _connectedShuttles.Count - 1;
+                }
+                else if (!_connectedShuttles.Any())
+                {
+                    ActiveTabIndex = -1;
+                }
+
                 StateHasChanged();
             }
         });
+    }
+
+    private void SelectShuttle(int tabIndex)
+    {
+        if (tabIndex >= 0 && tabIndex < _connectedShuttles.Count)
+        {
+            ActiveTabIndex = tabIndex;
+        }
     }
 
     private bool IsAlreadyConnected(string ipAddress)

@@ -32,7 +32,8 @@ public interface IShuttleHubClientService
     /// </summary>
     /// <param name="ipAddress">IP-адрес ESP32.</param>
     /// <returns>True, если подключение инициировано успешно.</returns>
-    public Task<bool> ConnectToShuttleAsync(string ipAddress, int port);
+    public Task ConnectToShuttleAsync(string ipAddress, int port);
+    //public Task<bool> ConnectToShuttleAsync(string ipAddress, int port);
 
     /// <summary>
     /// Отключается от ESP32 по указанному IP.

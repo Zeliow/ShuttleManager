@@ -10,10 +10,8 @@ builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents();
 
 // Add device-specific services used by the ShuttleManager.Shared project
-builder.Services.AddSingleton<INetworkDeviceScanner, NetworkDeviceScanner>();
 builder.Services.AddSingleton<ITcpClientService, TcpClientService>();
 builder.Services.AddSingleton<IShuttleHubClientService, ShuttleHubClientService>();
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

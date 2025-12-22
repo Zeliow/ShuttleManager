@@ -9,10 +9,10 @@
 @inject ILogger<ShuttleHubControlComponent> Logger
 @using ShuttleManager.Shared.Models
 
-<div class="card mb-3" style="min-width: 1600px">
+<div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
-            Шаттл №: @Shuttle.ShuttleNumber
+            Шаттл №: @SeeCorrentNumberShuttle(Shuttle.ShuttleNumber)
             <span class="badge @(IsConnected ? "bg-success" : "bg-warning") ms-2">
                 @(IsConnected ? "Подключен" : "Подключение...")
             </span>
@@ -39,239 +39,268 @@
         }
         else
         {
-            <!-- Панель состояния -->
-            <div class="mb-3">
+            <div class="container-fluid">
                 <div class="row">
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Батарея:</label>
-                        <p id="batteryData_@ComponentId" class="fw-bold @GetBatteryColorClass()">
-                            @BatteryData
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Заряд:</label>
-                        <div class="progress" style="height: 20px;">
-                            <div class="progress-bar @GetBatteryProgressClass()"
-                                 role="progressbar"
-                                 style="width: @(BatteryPercentageValue)%;"
-                                 aria-valuenow="@BatteryPercentageValue"
-                                 aria-valuemin="0"
-                                 aria-valuemax="100">
-                                @BatteryPercentageValue%
+                    <div class="col-md-7">
+                        <div class="card mb-2" >
+                            <div class="card-body p-2" style="height: 100%">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label>Терминал: </label>
+                                    <div style="height: 100%">
+                                        <button class="btn btn-sm btn-outline-danger me-1" @onclick="ClearTerminal" title="Очистить терминал">
+                                            <i class="bi bi-trash">❌</i>
+                                        </button>
+                                        <span class="badge bg-secondary">@TerminalLines.Count строк</span>
+                                    </div>
+                                </div>
+                                <div id="terminalContainer_@ComponentId"
+                                     class="terminal-container border rounded"
+                                     style="height: 448px;">
+                                    @((MarkupString)TerminalOutputHtml)
+                                </div>
+                                <div class="input-group input-group-sm mt-2">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-terminal"></i>
+                                    </span>
+                                    <InputText @bind-Value="ManualCommand"
+                                               class="form-control form-control-sm"
+                                               placeholder="Введите команду..."
+                                               @onkeypress="HandleKeyPress"
+                                               disabled="@(!IsConnected || _isCommandInProgress)" />
+                                    <button class="btn btn-primary btn-sm"
+                                            @onclick="SendManualCommand">
+                                        <i class="bi bi-send"></i> Отпр
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <div class="card">
+                                <div class="card-body p-2">
+                                    <div class="row g-1">
+                                        <div class="col-6 mb-1">
+                                            <button class="btn btn-danger btn-sm w-100" @onclick="SendResetCommand" title="Сброс текущих ошибок">
+                                                <i class="bi bi-arrow-counterclockwise me-1"></i>Сброс ошибок
+                                            </button>
+                                        </div>
+                                        <div class="col-6 mb-1">
+                                            <button class="btn btn-secondary btn-sm w-100" @onclick="SendCalibrateCommand" title="Запуск процедуры калибровки">
+                                                <i class="bi bi-rulers me-1"></i>Калибровка
+                                            </button>
+                                        </div>
+                                        <div class="col-12">
+                                            <button class="btn btn-danger btn-sm w-100 " @onclick="SendRebootShuttleCommand" title="Полная перезагрузка шаттла">
+                                                <i class="bi bi-arrow-repeat me-1"></i>ребут
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body p-2">
+                                    <div class="row g-1">
+                                        <div class="col-6">
+                                            <div class="mb-1">
+                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
+                                                    <i class="bi bi-cloud-arrow-up me-1"></i>FRM
+                                                </button>
+                                            </div>
+                                            <div class="mb-1">
+                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i>UPD
+                                                </button>
+                                            </div>
+                                           
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="mb-1">
+                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="SetTime" title="Установить время">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i>Установить время
+                                                </button>
+                                            </div>
+                                            <div class="mb-1">
+                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenLogsShuttle" title="Открыть логи шаттла" disabled>
+                                                    <i class="bi bi-arrow-clockwise me-1"></i>Логи шаттла
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Статус:</label>
-                        <p id="currentStatus_@ComponentId" class="fw-bold @GetStatusColorClass()">
-                            @CurrentStatus
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Активность:</label>
-                        <p class="small text-muted">@LastActivityTime</p>
-                    </div>
-                </div>
 
-                <div class="row mt-2">
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Напряжение:</label>
-                        <p id="voltage_@ComponentId" class="fw-bold">
-                            @Voltage.ToString("F1") V
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Код ошибки:</label>
-                        <p id="errorCode_@ComponentId" class="fw-bold @(ErrorCode != 0 ? "text-danger" : "text-success")">
-                            @(ErrorCode == 0 ? "Нет" : ErrorCode.ToString())
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Код предупреждения:</label>
-                        <p id="warningCode_@ComponentId" class="fw-bold @(WarningCode != 0 ? "text-warning" : "text-success")">
-                            @(WarningCode == 0 ? "Нет" : WarningCode.ToString())
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Время работы:</label>
-                        <p class="small text-muted">@Uptime</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Панель управления -->
-            @* <div class="mb-3">
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <div class="d-grid gap-2 w-100">
-                            <button class="btn btn-primary btn-sm w-100"
-                                    @onclick="SendLoadCommand"
-                                    title="Команда загрузки">
-                                <i class="bi bi-upload"></i> Загрузка ↗
-                            </button>
-                            <button class="btn btn-info btn-sm w-100"
-                                    @onclick="SendDemoCommand"
-                                    title="Запуск демо-режима">
-                                <i class="bi bi-play-circle"></i> Демо
-                            </button>
-                            <button class="btn btn-danger btn-sm w-100"
-                                    @onclick="SendSaveSettingCommand"
-                                    title="Сохранение настроек шаттла">
-                                <i class="bi bi-stop-circle"></i> Сохраненить настройки
-                            </button>
-                            <button class="btn btn-danger btn-sm w-100"
-                                    @onclick="SendUpdateFirmwareCommand"
-                                    title="Открытие меню обновления прошивки">
-                                <i class="bi bi-stop-circle"></i> FRM
-                            </button>
-                            <button class="btn btn-danger btn-sm w-100"
-                                    @onclick="SendStopCommand"
-                                    title="Остановка шаттла">
-                                <i class="bi bi-stop-circle"></i> STOP
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="d-grid gap-2 w-100">
-                            <button class="btn btn-warning btn-sm w-100"
-                                    @onclick="SendUnloadCommand"
-                                    title="Команда выгрузки">
-                                <i class="bi bi-arrow-repeat"></i> Выгрузка
-                            </button>
-                            
-                            <button class="btn btn-dark btn-sm w-100"
-                                    @onclick="SendResetCommand"
-                                    title="Сброс ошибок">
-                                <i class="bi bi-arrow-counterclockwise"></i> Сброс ошибок
-                            </button>
-                            <button class="btn btn-outline-dark btn-sm w-100"
-                                    @onclick="SendCalibrateCommand"
-                                    title="Команда калибровки шаттла">
-                                <i class="bi bi-gear"></i> Калибровка
-                            </button>
-                            <button class="btn btn-danger btn-sm w-100"
-                                    @onclick="SendUpdateStateShuttleCommand"
-                                    title="Применение обновления прогивки">
-                                <i class="bi bi-stop-circle"></i> UPD
-                            </button>
-                            <button class="btn btn-danger btn-sm w-100"
-                                    @onclick="SendRebootShuttleCommand"
-                                    title="Перезагрузка шаттла">
-                                <i class="bi bi-stop-circle"></i> REBOOT
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div> *@
-            <div class="mb-3">
-                <div class="row g-3">
-                    <!-- Блок 1: Основные операции -->
-                    <div class="col-md-6">
-                        <h6 class="fw-bold text-muted mb-2">Основные операции</h6>
-                        <div class="d-grid gap-2 w-100">
-                            <button class="btn btn-success btn-sm w-100" @onclick="SendLoadCommand" title="Запуск цикла загрузки">
-                                <i class="bi bi-upload me-1"></i>Загрузка ↗
-                            </button>
-                            <button class="btn btn-warning btn-sm w-100" @onclick="SendUnloadCommand" title="Запуск цикла выгрузки">
-                                <i class="bi bi-download me-1"></i>Выгрузка ↘
-                            </button>
-                            <button class="btn btn-info btn-sm w-100" @onclick="SendDemoCommand" title="Запуск демонстрационного режима">
-                                <i class="bi bi-play-circle me-1"></i>Демо-режим
-                            </button>
-                            <button class="btn btn-secondary btn-sm w-100" @onclick="SendGoHomeCommand" title="Возврат шаттла в исходную позицию" disabled>
-                                <i class="bi bi-house-door me-1"></i>Домой
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Блок 2: Ручное управление перемещением -->
-                    <div class="col-md-6">
-                        <h6 class="fw-bold text-muted mb-2">Ручное управление</h6>
-                        <div class="d-grid gap-2 w-100">
-                            <button class="btn btn-primary btn-sm w-100" @onclick="SendUpShuttleCommand" title="Движение вперёд">
-                                <i class="bi bi-arrow-up-square me-1"></i>Вперёд (UP)
-                            </button>
-                            <div class="btn-group w-100" role="group">
-                                <button class="btn btn-primary btn-sm" @onclick="SendLeftShuttleCommand" title="Движение влево" disabled>
-                                    <i class="bi bi-arrow-left-square me-1" ></i>← LEFT
-                                </button>
-                                <button class="btn btn-primary btn-sm" @onclick="SendRightShuttleCommand" title="Движение вправо" disabled>
-                                    <i class="bi bi-arrow-right-square me-1"></i>RIGHT →
-                                </button>
+                    <div class="col-md-5">
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header p-1">
+                                        <h6 class="fw-bold text-muted mb-0">Команды</h6>
+                                    </div>
+                                    <div class="card-body p-2">
+                                        <div class="row g-1">
+                                            <div class="col-6 mb-1">
+                                                <button class="btn btn-success btn-sm w-100" @onclick="SendLoadCommand" title="Запуск цикла загрузки">
+                                                    <i class="bi bi-upload me-1"></i>Загрузка ↗
+                                                </button>
+                                            </div>
+                                            <div class="col-6 mb-1">
+                                                <button class="btn btn-success btn-sm w-100" @onclick="SendLargeLoadCommand" title="Запуск продолжительного цикла загрузки">
+                                                    <i class="bi bi-upload me-1"></i>П. Загрузка ↗↗
+                                                </button>
+                                            </div>
+                                            <div class="col-6 mb-1">
+                                                <button class="btn btn-warning btn-sm w-100" @onclick="SendUnloadCommand" title="Запуск цикла выгрузки">
+                                                    <i class="bi bi-download me-1"></i>Выгрузка ↘
+                                                </button>
+                                            </div>
+                                            <div class="col-6 mb-1">
+                                                <button class="btn btn-warning btn-sm w-100" @onclick="SendLargeUnloadCommand" title="Запуск продолжительного цикла выгрузки">
+                                                    <i class="bi bi-download me-1"></i>П. Выгрузка ↘↘
+                                                </button>
+                                            </div>
+                                            <div class="col-6 mb-1">
+                                                <button class="btn btn-success btn-sm w-100" @onclick="SendSealingForwardShuttleCommand" title="Уплотнение вперед">
+                                                    <i class="bi bi-arrows-angle-contract me-1"></i>Уплотнение вперёд
+                                                </button>
+                                            </div>
+                                            <div class="col-6 mb-1">
+                                                <button class="btn btn-warning btn-sm w-100" @onclick="SendSealingBackShuttleCommand" title="Уплотнение назад">
+                                                    <i class="bi bi-arrows-angle-expand me-1"></i>Уплотнение назад
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <button class="btn btn-primary btn-sm w-100" @onclick="SendDownShuttleCommand" title="Движение назад">
-                                <i class="bi bi-arrow-down-square me-1"></i>Назад (DOWN)
-                            </button>
+
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header p-1">
+                                        <h6 class="fw-bold text-muted mb-0">Управление</h6>
+                                    </div>
+                                    <div class="card-body p-2">
+                                        <div class="row g-1">
+                                            <div class="col-4 mb-1">
+                                                <button class="btn btn-info btn-sm w-100 p-2" @onclick="SendDemoCommand" title="Запуск демонстрационного режима">
+                                                    <i class="bi bi-play-circle me-1"></i>Демо-режим
+                                                </button>
+                                            </div>
+                                            <div class="col-4 mb-1">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendUpShuttleCommand" title="Движение вперёд">
+                                                    <i class="bi bi-arrow-up-square me-1"></i>↑ вверх ↑
+                                                </button>
+                                            </div>
+                                            <div class="col-4 mb-1">
+                                                <button class="btn btn-warning btn-sm w-100 p-2" @onclick="SendSetMoveReverseShuttleCommand" title="Реверс">
+                                                    <i class="bi bi-download me-1"></i>Реверс 🔄
+                                                </button>
+                                            </div>
+
+                                            <div class="col-4">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendLeftShuttleCommand" title="Движение влево">
+                                                    <i class="bi bi-arrow-left-square me-1"></i>← назад ←
+                                                </button>
+                                            </div>
+                                            <div class="col-4">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendDownShuttleCommand" title="Движение назад">
+                                                    <i class="bi bi-arrow-down-square me-1"></i>↓ вниз ↓
+                                                </button>
+                                            </div>
+                                            <div class="col-4">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendRightShuttleCommand" title="Движение вправо">
+                                                    <i class="bi bi-arrow-right-square me-1"></i>→ вперёд →
+                                                </button>
+                                            </div>
+
+                                            <div class="col-12 mb-1">
+                                                <button class="btn btn-danger btn-sm w-100 p-3" @onclick="SendStopCommand" title="Экстренная остановка всех операций">
+                                                    <i class="bi bi-stop-circle-fill me-1"></i><strong>STOP</strong>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Параметры (новая секция) -->
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header p-1">
+                                        <h6 class="fw-bold text-muted mb-0">Параметры</h6>
+                                    </div>
+                                    <div class="card-body p-2">
+                                        <div class="row g-1">
+                                            <!-- Номер шаттла -->
+                                            <div class="col-12 mb-1">
+                                                <div class="input-group input-group-sm">
+                                                    <InputNumber @bind-Value="ShuttleNumberInput" class="form-control form-control-sm" min="1" max="999" placeholder="Номер шаттла" />
+                                                    <button class="btn btn-secondary btn-sm w-75" value="1" @onclick="SendSetShuttleNumCommand" title="Установить номер шаттла">
+                                                        Установить номер шаттла
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Расстояние назад -->
+                                            <div class="col-12 mb-1">
+                                                <div class="input-group input-group-sm">
+                                                    <InputNumber @bind-Value="MoveDistanceBackwardInput" class="form-control form-control-sm" min="0" max="10000" step="10" placeholder="Расст. назад (мм)" />
+                                                    <button class="btn btn-secondary btn-sm w-75" value="0" @onclick="SendSetMoveReverseShuttleCommand" title="Проезд заданного расстояния назад">
+                                                        Движение назад, мм ⮜⮜
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Расстояние вперёд -->
+                                            <div class="col-12 mb-1">
+                                                <div class="input-group input-group-sm">
+                                                    <InputNumber @bind-Value="MoveDistanceForwardInput" class="form-control form-control-sm" min="0" max="10000" step="10" placeholder="Расст. вперёд (мм)" />
+                                                    <button class="btn btn-secondary btn-sm w-75" value="0" @onclick="SendMoveForwardShuttleCommand" title="Проезд заданного расстояния вперёд">
+                                                        Движение вперёд, мм ⮞⮞
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Макс. скорость -->
+                                            <div class="col-12 mb-1">
+                                                <div class="input-group input-group-sm">
+                                                    <InputNumber @bind-Value="MaxSpeedInput" class="form-control form-control-sm" min="5" max="100" step="1" placeholder="Макс. скорость (%)" />
+                                                    <button class="btn btn-secondary btn-sm w-75" value="5" @onclick="SendSetMaxSpeedShuttleCommand" title="Установить максимальную скорость">
+                                                        Установить максимальную скорость, % V
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Мин. мощность -->
+                                            <div class="col-12 mb-1">
+                                                <div class="input-group input-group-sm">
+                                                    <InputNumber @bind-Value="MinPowerInput" class="form-control form-control-sm" min="0" max="100" step="1" placeholder="Мин. заряд (%)" />
+                                                    <button class="btn btn-secondary btn-sm w-75" value="0" @onclick="SendSetMinPowerShuttleCommand" title="Установить минимальную заряд">
+                                                        Установить лимит заряда, %
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 mb-1">
+                                                <div class="input-group input-group-sm">
+                                                    <InputNumber @bind-Value="MinPowerInput" class="form-control form-control-sm" min="0" max="500" step="10" placeholder="меж. паллет. растояние (мм)" />
+                                                    <button class="btn btn-secondary btn-sm w-75" value="0" @onclick="SendSetPalletBetweenDistanceShuttleCommand" title="Установить межпаллетное расстояние">
+                                                        Межпаллетное расстояние, мм ↔
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 mb-1 mt-1">
+                                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendSaveSettingCommand" title="Сохранить текущие параметры в память">
+                                                <i class="bi bi-save me-1"></i>Сохранить настройки
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>                            
                         </div>
                     </div>
-
-                    <!-- Блок 3: Система, безопасность и обслуживание -->
-                    <div class="col-md-6 mt-3 mt-md-0">
-                        <h6 class="fw-bold text-muted mb-2">Система и безопасность</h6>
-                        <div class="d-grid gap-2 w-100">
-                            <button class="btn btn-outline-dark btn-sm w-100" @onclick="SendResetCommand" title="Сброс текущих ошибок">
-                                <i class="bi bi-arrow-counterclockwise me-1"></i>Сброс ошибок
-                            </button>
-                            <button class="btn btn-danger btn-sm w-100" @onclick="SendStopCommand" title="Экстренная остановка всех операций">
-                                <i class="bi bi-stop-circle-fill me-1"></i><strong>STOP</strong>
-                            </button>
-                            <button class="btn btn-secondary btn-sm w-100" @onclick="SendCalibrateCommand" title="Запуск процедуры калибровки" disabled>
-                                <i class="bi bi-rulers me-1"></i>Калибровка
-                            </button>
-                            <button class="btn btn-secondary btn-sm w-100" @onclick="SendSaveSettingCommand" title="Сохранить текущие параметры в память" disabled>
-                                <i class="bi bi-save me-1"></i>Сохранить настройки
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Блок 4: Обновление и перезагрузка -->
-                    <div class="col-md-6 mt-3 mt-md-0">
-                        <h6 class="fw-bold text-muted mb-2">Прошивка и перезагрузка</h6>
-                        <div class="d-grid gap-2 w-100">
-                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки" >
-                                <i class="bi bi-cloud-arrow-up me-1"></i>Обновить прошивку (FRM)
-                            </button>
-                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление" >
-                                <i class="bi bi-arrow-clockwise me-1"></i>Применить обновление (UPD)
-                            </button>
-                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendRebootShuttleCommand" title="Полная перезагрузка шаттла" disabled>
-                                <i class="bi bi-arrow-repeat me-1"></i>Перезагрузка (RBT)
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Терминал -->
-            <div>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <label class="form-label small text-muted">Терминал:</label>
-                    <div>
-                        <button class="btn btn-sm btn-outline-secondary me-1" @onclick="ClearTerminal" title="Очистить терминал">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                        <span class="badge bg-secondary">@TerminalLines.Count строк</span>
-                    </div>
-                </div>
-
-                <div id="terminalContainer_@ComponentId"
-                     class="terminal-container"
-                     style="height: 200px; overflow-y: auto; border: 1px solid #dee2e6; padding: 10px; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.8em; background-color: #f8f9fa; border-radius: 0.375rem;">
-                    @((MarkupString)TerminalOutputHtml)
-                </div>
-
-                <div class="input-group input-group-sm mt-2">
-                    <span class="input-group-text">
-                        <i class="bi bi-terminal"></i>
-                    </span>
-                    <InputText @bind-Value="ManualCommand"
-                               class="form-control form-control-sm"
-                               placeholder="Введите команду..."
-                               @onkeypress="HandleKeyPress"
-                               disabled="@(!IsConnected || _isCommandInProgress)" />
-                    <button class="btn btn-primary btn-sm"
-                            @onclick="SendManualCommand">
-                        <i class="bi bi-send"></i> Отпр
-                    </button>
                 </div>
             </div>
         }
@@ -281,6 +310,15 @@
 @code {
     [Parameter] public Shuttle Shuttle { get; set; } = null!;
     [Parameter] public EventCallback<string> OnDisconnected { get; set; }
+
+    private int ShuttleNumberInput = 0;
+    private int MoveDistanceBackwardInput = 0;
+    private int MoveDistanceForwardInput = 0;
+    private int MaxSpeedInput = 0;
+    private int MinPowerInput = 0; 
+    private int PallentDistance = 0;
+
+
 
     private readonly List<string> _terminalLines = new();
     private string _terminalOutputHtml = "";
@@ -303,18 +341,25 @@
     private List<string> TerminalLines => _terminalLines;
     private string TerminalOutputHtml => _terminalOutputHtml;
     private string ManualCommand { get => _manualCommand; set => _manualCommand = value; }
-    private int countDebug = 1;
+    private string pathLogShuttle = "";
+
+
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            if (!Directory.Exists($"{AppContext.BaseDirectory}/logs"))
+            {
+                Directory.CreateDirectory($"{AppContext.BaseDirectory}/logs");
+            }          
             HubClientService.Connected += OnHubConnected;
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.TelemetryReceived += OnTelemetryReceived;
             HubClientService.LogReceived += OnLogReceived;
-
+            pathLogShuttle = Path.Combine($"{AppContext.BaseDirectory}/logs", $"Shuttle_Log_Number_{DateTime.Now.Day}_{DateTime.Now.Month}_{DateTime.Now.Year}_{Shuttle.IPAddress}.txt");
             Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
+            StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -323,10 +368,20 @@
         }
     }
 
+    private string SeeCorrentNumberShuttle (string numberShuttle)
+    {
+        if (char.IsDigit(numberShuttle[0]))
+        {
+            return numberShuttle;
+        }
+        else
+        {
+            return numberShuttle.Substring(1);
+        }
+    }
+
     private bool IsEventForThisShuttle(string ipAddress)
     {
-        //Debug.WriteLine($"Отработка вызова ивента для работы с шаттлом: {countDebug}");
-        countDebug++;
         return ipAddress == Shuttle.IPAddress;
     }
 
@@ -378,7 +433,7 @@
 
     private void ProcessTelemetryData(JsonNode telemetry)
     {
-        var id = telemetry["id"]?.GetValue<int>() ?? 0;
+        var id = telemetry["id"]?.GetValue<string>() ?? "";
         var batt = telemetry["batt"]?.GetValue<int>() ?? 0;
         var volt = telemetry["volt"]?.GetValue<double>() ?? 0.0;
         var stateStr = telemetry["state_s"]?.ToString() ?? "Неизвестно";
@@ -391,16 +446,14 @@
         Shuttle.CurrentStatus = stateStr;
         Shuttle.ErrorCode = err;
         Shuttle.WarningCode = warn;
-
-        //if (err != 0)
-            //LogToTerminal($"[ALERT] Код ошибки: {err}\n");
-        //if (warn != 0) 
-           // LogToTerminal($"[WARNING] Код предупреждения: {warn}\n");
     }
 
     private async void OnLogReceived(string ip, string log)
     {
         if (!IsEventForThisShuttle(ip)) return;
+
+
+        File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
 
         await InvokeAsync(() =>
         {
@@ -432,17 +485,16 @@
             var displayCommand = string.IsNullOrEmpty(description) ? command : $"{command} ({description})";
             LogToTerminal($"[CMD] Отправка: {displayCommand}\n");
 
-
             var success = await HubClientService.SendCommandToShuttleAsync(Shuttle.IPAddress, command, 1000);
 
-            if (success)
-            {
-                LogToTerminal($"[SUCCESS] Команда выполнена: {command}\n");
-            }
-            else
-            {
-                LogToTerminal($"[ERROR] Ошибка выполнения: {command}\n");
-            }
+            // if (success)
+            // {
+            //     LogToTerminal($"[SUCCESS] Команда выполнена: {command}\n");
+            // }
+            // else
+            // {
+            //     LogToTerminal($"[ERROR] Ошибка выполнения: {command}\n");
+            // }
         }
         catch (OperationCanceledException)
         {
@@ -459,49 +511,104 @@
             StateHasChanged();
         }
     }
-    private async Task SendStopCommand() => await SendCommandAsync("STOP", "Остановка");
-    private async Task SendLoadCommand() => await SendCommandAsync("LOAD", "Загрузка");
-    private async Task SendUnloadCommand() => await SendCommandAsync("UNLOAD", "Выгрузка");
-    private async Task SendUpShuttleCommand() => await SendCommandAsync("UP", "Подъём");
-    private async Task SendDownShuttleCommand() => await SendCommandAsync("DOWN", "Спуск");
-    private async Task SendManualShuttleCommand() => await SendCommandAsync("MANUAL", "Manual");
-    private async Task SendDemoCommand() => await SendCommandAsync("DEMO", "Демо-режим");
-    private async Task SendResetCommand() => await SendCommandAsync("RESET_ERRORS", "Сброс ошибок");
 
-    private async Task SendSaveSettingCommand() => await SendCommandAsync("SAVE_SETTINGS", "Сохранение настроек"); // disabled
-    private async Task SendCalibrateCommand() => await SendCommandAsync("CALIBRATE", "Калибровка шаттла"); // disabled
-    private async Task SendGoHomeCommand() => await SendCommandAsync("GOTO_HOME", "Возвращение домой"); // disabled
+    private async Task SendSetShuttleNumCommand()
+    {
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dNN{ShuttleNumberInput}", $"Установка номера шаттла: {ShuttleNumberInput}");
+    }
 
-    //Параметры
-    private async Task SendSetTimeShuttleCommand() => await SendCommandAsync("SET_TIME", "Установка времени");
-    private async Task SendSetMaxSpeedShuttleCommand() => await SendCommandAsync("SET_MAX_SPEED", "Установка максимальной скорости");
-    private async Task SendSetMinPowerShuttleCommand() => await SendCommandAsync("SET_MIN_BATT", "Установка минимальной мощности");
-    private async Task SendMoveForwardShuttleCommand() => await SendCommandAsync("MOVE_FORWARD", "Движение обратно");
-    private async Task SendSetMoveReverseShuttleCommand() => await SendCommandAsync("MOVE_REVERSE", "Реверс движения");
-    private async Task SendSetShuttleNumCommand() => await SendCommandAsync("SET_SHUTTLE_NUM", "Установка номера шаттла");
+    private async Task SendSetMoveReverseShuttleCommand()
+    {
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dMf{MoveDistanceBackwardInput}", $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм");
+    }
 
-    private async Task SendLeftShuttleCommand() => await SendCommandAsync("dLeft_", "движение влево"); // disabled
-    private async Task SendRightShuttleCommand() => await SendCommandAsync("dRight", "движение вправо"); // disabled
-    
-      
-    
-    private async Task SendUpdateFirmwareCommand() => await SendUpdateCommandAndOpenBrowser();
-    private async Task SendUpdateStateShuttleCommand() => await SendCommandAsync("UPD", "Update shuttle");
+    private async Task SendMoveForwardShuttleCommand()
+    {
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dMr{MoveDistanceForwardInput}", $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм");
+    }
+
+    private async Task SendSetMaxSpeedShuttleCommand()
+    {
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dSp{MaxSpeedInput}", $"Установка максимальной скорости: {MaxSpeedInput}%");
+    }
+
+    private async Task SendSetMinPowerShuttleCommand()
+    {
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dBc{MinPowerInput}", $"Установка лимита батареи: {MinPowerInput}%");
+    }
+
+    private async Task SendSetPalletBetweenDistanceShuttleCommand()
+    {
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dDm{PallentDistance}", $"Установка межпаллетного расстояния: {PallentDistance}%");
+    }
+
+    private async Task SetTime()
+    {
+        DateTime currentTime = DateTime.Now;
+        string command = $"DT {currentTime:HH:mm:ss dd/MM/yyyy}";
+        await SendCommandAsync(command);
+    }
+
+    //TO-DO add Open Logs
+    private async Task OpenLogsShuttle()
+    {
+        // File.Open(pathLogShuttle, FileMode.Open);
+    }
+
+    // --- Все методы отправки команд ---
+    private async Task SendStopCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dStop_", "Остановка");
+    private async Task SendLoadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLoad_", "Загрузка");
+    private async Task SendLargeLoadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLLoad", "Длительная загрузка");
+    private async Task SendUnloadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dUnld_", "Выгрузка");
+    private async Task SendLargeUnloadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLUnld", "Длительная выгрузка");
+
+    private async Task SendManualShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dManua", "Ручной режим");
+    private async Task SendDemoCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dDemo_", "Демо-режим");
+    private async Task SendResetCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dReset", "Сброс ошибок");
+
+    private async Task SendSaveSettingCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dSaveC", "Сохранение настроек");
+    private async Task SendCalibrateCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dClbr_", "Калибровка шаттла");
+    private async Task SendGoHomeCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dHome_", "Возвращение домой");
+
+    private async Task SendSetTimeShuttleCommand() => await SendCommandAsync("DT", "Установка времени и даты");
+    // private async Task SendSetMaxSpeedShuttleCommand() => await SendCommandAsync("dSp", "Установка максимальной скорости");
+    // private async Task SendSetMinPowerShuttleCommand() => await SendCommandAsync("dBc", "Установка минимальной мощности");
+    // private async Task SendMoveForwardShuttleCommand() => await SendCommandAsync("dMr", "Проезд расстояния вперёд");
+    // private async Task SendSetMoveReverseShuttleCommand() => await SendCommandAsync("dMf", "Проезд расстояния назад");
+    // private async Task SendSetShuttleNumCommand() => await SendCommandAsync("dNN", "Установка номера шаттла");
+    private async Task SendUseReverseModeShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dRevOn", "Реверс режим");
+    private async Task SendSealingForwardShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dComFo", "Уплотнение вперед");
+    private async Task SendSealingBackShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dComBa", "Уплотнение назад");
+
+    private async Task SendUpShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dUp___", "Подъём");
+    private async Task SendLeftShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLeft_", "движение назад");
+    private async Task SendRightShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dRight", "движение вперёд");
+    private async Task SendDownShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dDown_", "Спуск");
+
+    private async Task SendFRMFirmwareCommand() => await SendUpdateCommandAndOpenBrowser();
+    private async Task SendUpdateStateShuttleCommand() => await SendUPDCommandAndOpenBrowser();
+
     private async Task SendRebootShuttleCommand() => await SendCommandAsync("RBT", "Reboot shuttle");
-
-    
-    
-
 
     private async Task SendUpdateCommandAndOpenBrowser()
     {
-        await SendCommandAsync("FRM", "Обновление");
-        await OpenWebInterfaceAsync();
+        await SendCommandAsync("FRM", "Прошивка");
+        await OpenWebInterfaceAsync("FRM");
     }
 
-    private async Task OpenWebInterfaceAsync()
+    private async Task SendUPDCommandAndOpenBrowser()
     {
-        var url = $"http://{Shuttle.IPAddress}/list";
+        await SendCommandAsync("UPD", "Обновление");
+        await OpenWebInterfaceAsync("UPD");
+    }
+
+    private async Task OpenWebInterfaceAsync(string argOpenBrowser)
+    {
+        var url = $"http://{Shuttle.IPAddress}/";
+        if (argOpenBrowser == "UPD")
+        {
+            url += "update";
+        }       
         try
         {
             var uri = new Uri(url);
