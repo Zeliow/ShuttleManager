@@ -30,11 +30,9 @@ public class Shuttle
     public DateTime ConnectionTime { get; set; } = DateTime.Now;
     public DateTime LastActivity { get; set; } = DateTime.Now;
 
-
-
-
     // Новое: история сообщений для терминала
     private readonly ConcurrentQueue<string> _terminalMessages = new();
+
     private readonly object _lock = new object();
 
     public void AddTerminalMessage(string message)
@@ -55,8 +53,8 @@ public class Shuttle
     }
 
     // Метод для обновления статуса соединения
-    public void SetConnectionStatus(bool isConnected)
-    {
-        IsConnected = isConnected;
-    }
+    //public void SetConnectionStatus(bool isConnected)
+    //{
+    //    IsConnected = isConnected;
+    //}
 }

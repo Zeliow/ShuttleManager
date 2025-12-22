@@ -13,7 +13,6 @@
     <h3>Панель управления шаттлами</h3>
 
     <div class="row">
-        <!-- Левая колонка: Сканер и список найденных устройств -->
         <div class="col-md-3">
             <div class="card mb-3">
                 <div class="card-header">
@@ -51,8 +50,7 @@
                             <ul class="list-group list-group-flush">
                                 @foreach (var ip in FoundDevices)
                                 {
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        @ip.ToString()
+                                    <li class="list-group-item d-flex justify-content-between align-items-center"> @ip.ToString()
                                         <button class="btn btn-sm btn-outline-success"
                                                 @onclick="() => HandleConnectClickIfNotConnected(ip.ToString())"
                                                 disabled="@IsAlreadyConnected(ip.ToString())">
@@ -73,7 +71,6 @@
                 </div>
             </div>
 
-            <!-- Список подключенных устройств -->
             @if (_connectedShuttles.Any())
             {
                 <div class="card">
@@ -85,7 +82,7 @@
                             @foreach (var shuttle in _connectedShuttles)
                             {
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>@* Шаттл № @SeeCorrentNumberShuttle(shuttle.ShuttleNumber) *@ (@shuttle.IPAddress)</span>
+                                    <span>(@shuttle.IPAddress)</span>
                                     <button class="btn btn-sm btn-danger"
                                             @onclick="() => DisconnectShuttle(shuttle.IPAddress)">
                                         <i class="bi bi-power">Отключить</i>
@@ -98,18 +95,16 @@
             }
         </div>
 
-        <!-- Правая колонка: Вкладки с подключенными устройствами -->
         <div class="col-md-9">
             @if (_connectedShuttles.Any())
             {
-                <!-- Навигация по вкладкам -->
+
                 <ul class="nav nav-tabs mb-3">
-                    @for (int i = 0; i < _connectedShuttles.Count; i++)
+                    @foreach (var (shuttle, index) in _connectedShuttles.Select((s, i) => (s, i)))
                     {
-                        var shuttle = _connectedShuttles[i];
                         <li class="nav-item">
-                            <a class="nav-link @(i == ActiveTabIndex ? "active" : "")"
-                               href="#" @onclick="() => SelectShuttle(i)">
+                            <a class="nav-link @(index == ActiveTabIndex ? "active" : "")"
+                               href="#" @onclick="() => SelectShuttle(index)">
                                 Шаттл №@SeeCorrentNumberShuttle(shuttle.ShuttleNumber)
                                 @if (shuttle.IsConnected)
                                 {
@@ -124,7 +119,6 @@
                     }
                 </ul>
 
-                <!-- Контент активной вкладки -->
                 @if (ActiveTabIndex >= 0 && ActiveTabIndex < _connectedShuttles.Count)
                 {
                     var activeShuttle = _connectedShuttles[ActiveTabIndex];
@@ -138,7 +132,6 @@
             }
             else
             {
-                <!-- Пустое состояние правой колонки -->
                 <div class="alert alert-info text-center" style="margin-top: 50px;">
                     <h5>Нет подключенных устройств</h5>
                     <p>Подключите устройство через сканер слева для управления.</p>
@@ -168,29 +161,15 @@
         HubClientService.Connected += OnShuttleConnected;
         HubClientService.Disconnected += OnShuttleDisconnected;
         await RefreshConnectedShuttles();
-
-        _cleanupTimer = new Timer(async _ => await CleanupDisconnectedShuttles(),
-            null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        _cleanupTimer = new Timer(async _ => await CleanupDisconnectedShuttles(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private async Task HandleConnectClickIfNotConnected(string ipAddress)
     {
-        
-        // Проверяем, подключено ли устройство *сейчас*, чтобы избежать действия, если состояние изменилось между рендером и кликом
         {
-            // Выполняем подключение
             await HubClientService.ConnectToShuttleAsync(ipAddress, Port);
             StateHasChanged();
-            // if (success)
-            // {
-            //     Debug.WriteLine($"[INFO] Запрошено подключение к {ipAddress}\n");
-            // }
-            // else
-            // {
-            //     Debug.WriteLine($"[ERROR] Не удалось инициировать подключение к {ipAddress}\n");
-            // }
         }
-        // Если isConnected == true, метод просто завершает работу, ничего не делая
     }
 
 
@@ -235,7 +214,6 @@
                     _connectedShuttles.Remove(shuttle);
                 }
 
-                // Обновляем индекс активной вкладки
                 if (ActiveTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
                 {
                     ActiveTabIndex = _connectedShuttles.Count - 1;
@@ -275,20 +253,6 @@
         }
     }
 
-    // private async Task ConnectToShuttle(string ipAddress)
-    // {
-    //     await HubClientService.ConnectToShuttleAsync(ipAddress, Port);
-    //     StateHasChanged();
-    //     // if (success)
-    //     // {
-    //     //     Debug.WriteLine($"[INFO] Запрошено подключение к {ipAddress}\n");
-    //     // }
-    //     // else
-    //     // {
-    //     //     Debug.WriteLine($"[ERROR] Не удалось инициировать подключение к {ipAddress}\n");
-    //     // }
-    // }
-
     private async Task DisconnectShuttle(string ipAddress)
     {
         HubClientService.DisconnectFromShuttle(ipAddress);
@@ -308,12 +272,11 @@
                     ConnectionTime = DateTime.Now,
                     LastActivity = DateTime.Now,
                     ShuttleNumber = shuttleNums[(int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131)],
-                    
+
                 };
 
                 _connectedShuttles.Add(newShuttle);
 
-                // Переключаемся на новую вкладку
                 ActiveTabIndex = _connectedShuttles.Count - 1;
                 StateHasChanged();
                 Debug.WriteLine($"[SUCCESS] Подключен шаттл {ipAddress} (ID: {shuttleId})\n");
@@ -330,7 +293,6 @@
             {
                 _connectedShuttles.RemoveAt(index);
 
-                // Обновляем индекс активной вкладки
                 if (ActiveTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
                 {
                     ActiveTabIndex = _connectedShuttles.Count - 1;
@@ -347,16 +309,10 @@
 
     private void SelectShuttle(int tabIndex)
     {
-        if (tabIndex >= 0 && tabIndex < _connectedShuttles.Count)
-        {
-            ActiveTabIndex = tabIndex;
-        }
+        if (tabIndex >= 0 && tabIndex < _connectedShuttles.Count) ActiveTabIndex = tabIndex;
     }
 
-    private bool IsAlreadyConnected(string ipAddress)
-    {
-        return _connectedShuttles.Any(s => s.IPAddress == ipAddress);
-    }
+    private bool IsAlreadyConnected(string ipAddress) => _connectedShuttles.Any(s => s.IPAddress == ipAddress);
 
     public void Dispose()
     {
