@@ -20,6 +20,14 @@ namespace ShuttleManager.WinUI
         /// </summary>
         public App()
         {
+            // Попытка перехватить необработанные исключения
+            AppDomain.CurrentDomain.UnhandledException += (sender, args) => {
+                var exception = args.ExceptionObject as Exception;
+                Console.WriteLine($"[CRITICAL] Unhandled Exception: {exception?.Message}");
+                // Здесь можно записать ошибку в файл или отправить в аналитику
+            };
+
+
             this.InitializeComponent();
         }
 

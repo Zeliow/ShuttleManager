@@ -1,18 +1,9 @@
 ﻿@using ShuttleManager.Shared.Intefraces
 @inherits LayoutComponentBase
-@inject IJSRuntime JSRuntime
-@inject IWindowService WindowService
 
 <div class="page">
     <main>
         <article class="content px-4">
-            <div class="theme-toggle d-flex align-items-center">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="themeToggle" @ref="toggleElement" checked="@IsDarkMode" @onchange="OnDarkModeChanged" role="switch" />
-                    <label class="form-check-label" for="themeToggle" aria-label="Переключить тему">
-                    </label>
-                </div>
-            </div>
             @Body
         </article>
     </main>
@@ -25,54 +16,5 @@
 </div>
 
 @code {
-    private ElementReference toggleElement; // Для получения ссылки на элемент
-    private bool IsDarkMode { get; set; } = false;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            // Попробуем восстановить тему из localStorage при первом рендере
-            var savedTheme = await JSRuntime.InvokeAsync<string>("eval", "localStorage.getItem('user-theme-preference');");
-
-            if (savedTheme != null)
-            {
-                IsDarkMode = savedTheme == "dark";
-            }
-            else
-            {
-                // Опционально: определить системную тему при первом запуске
-                var systemPrefersDark = await JSRuntime.InvokeAsync<bool>("eval", "window.matchMedia('(prefers-color-scheme: dark)').matches;");
-                IsDarkMode = systemPrefersDark;
-                // Сохраняем как начальное предпочтение
-                await JSRuntime.InvokeVoidAsync("eval", $"localStorage.setItem('user-theme-preference', '{(IsDarkMode ? "dark" : "light")}');");
-            }
-
-            await ApplyThemeAsync(IsDarkMode);
-            StateHasChanged(); // Обновим UI, чтобы тумблер отразил состояние
-        }
-    }
-
-    // Метод для установки темы
-    private async Task ApplyThemeAsync(bool isDark)
-    {
-        var themeValue = isDark ? "dark" : "";
-        await JSRuntime.InvokeVoidAsync("eval", $"document.documentElement.setAttribute('data-theme', '{themeValue}');");
-        await JSRuntime.InvokeVoidAsync("eval", $"localStorage.setItem('user-theme-preference', '{(isDark ? "dark" : "light")}');");
-        Console.WriteLine($"[DEBUG] ApplyThemeAsync called, isDark={isDark}, themeValue='{themeValue}'");
-    }
-
-    // Обработчик изменения состояния тумблера через @onchange
-    private async Task OnDarkModeChanged(ChangeEventArgs e)
-    {
-        // Получаем новое состояние чекбокса из аргумента события
-        var newValue = e.Value is bool b ? b : Convert.ToBoolean(e.Value);
-        Console.WriteLine($"[DEBUG] OnDarkModeChanged fired, raw value: {e.Value}, parsed bool: {newValue}");
-
-        if (IsDarkMode != newValue)
-        {
-            IsDarkMode = newValue; // Обновляем локальное состояние
-            await ApplyThemeAsync(newValue); // Применяем новую тему
-        }
-    }
+    
 }

@@ -1,6 +1,6 @@
 ﻿using Foundation;
 
-namespace ShuttleManager
+namespace ShuttleManager.Platforms.iOS
 {
     [Register("AppDelegate")]
     public class AppDelegate : MauiUIApplicationDelegate

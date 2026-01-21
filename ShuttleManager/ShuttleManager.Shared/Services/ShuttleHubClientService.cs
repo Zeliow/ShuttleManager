@@ -11,10 +11,11 @@ namespace ShuttleManager.Shared.Services
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     {
         public event Action<string, JsonNode>? TelemetryReceived;
+        public event Action<string, ShuttleTelemetry>? TelemetryReceivedStruct;
         public event Action<string, string>? LogReceived;
         public event Action<string, int>? Connected;
         public event Action<string>? Disconnected;
-
+        public event Action<string>? ShuttleDataUpdated; // Новое событие
         private readonly Dictionary<string, ShuttleConnection> _connections = new();
         private readonly object _lock = new object(); // Защита доступа к _connections
 
@@ -193,6 +194,9 @@ namespace ShuttleManager.Shared.Services
                 connection.IsStartStream = true;
                 return "start stream!";
             }
+
+
+
             const int BufferSize = 512;
             byte[] readBuffer = new byte[BufferSize];
 
@@ -396,6 +400,7 @@ namespace ShuttleManager.Shared.Services
             }
         }
 
+
         public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
 
         private async Task InternalDisconnectAsync(string ipAddress)
@@ -468,6 +473,7 @@ namespace ShuttleManager.Shared.Services
    
         private void OnConnected(string ip, int id) => Connected?.Invoke(ip, id);
         private void OnDisconnected(string ip) => Disconnected?.Invoke(ip);
+        private void OnTelemetryReceived(string ip, ShuttleTelemetry telemetryShuttle) => TelemetryReceivedStruct?.Invoke(ip, telemetryShuttle);
         private void OnTelemetryReceived(string ip, JsonNode telemetry) => TelemetryReceived?.Invoke(ip, telemetry);
         private void OnLogReceived(string ip, string log) => LogReceived?.Invoke(ip, log);
     }

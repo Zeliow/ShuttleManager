@@ -20,8 +20,10 @@ public class ConnectedShuttleInfo
 
 public interface IShuttleHubClientService
 {
+    event Action<string, ShuttleTelemetry>? TelemetryReceivedStruct;
     // События для уведомления UI о изменениях
     event Action<string, JsonNode>? TelemetryReceived; // Передаёт IP и JSON
+    
     event Action<string, string>? LogReceived;        // Передаёт IP и лог
     event Action<string, int>? Connected;              // Передаёт IP и ID шаттла
     event Action<string>? Disconnected;                // Передаёт IP

@@ -12,9 +12,9 @@ a, .btn-link {
     border-color: #1861ac;
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+/*.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
     box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
+}*/
 
 .content {
     padding-top: 1.1rem;
@@ -128,12 +128,11 @@ h1:focus {
     --scrollbar-bg: #c9c9c9;
     --scrollbar-thumb-bg: #a0a0a0;
     --scrollbar-thumb-hover-bg: #888888;
-    /* --- Новые переменные для улучшения контрастности --- */
-    --card-header-text-color: var(--text-color); /* Цвет текста в заголовке карточки */
-    --card-header-h5-color: var(--text-color); /* Цвет текста для h5 в заголовке */
-    --card-header-h6-color: var(--text-color); /* Цвет текста для h6 в заголовке */
-    --badge-connected-text-color: #ffffff; /* Цвет текста для бейджа "Подключен" */
-    --text-muted-color: #6c757d; /* Цвет для text-muted в светлой теме */
+    --card-header-text-color: var(--text-color);
+    --card-header-h5-color: var(--text-color); 
+    --card-header-h6-color: var(--text-color)
+    --badge-connected-text-color: #ffffff; 
+    --text-muted-color: #6c757d;
 }
 
 /* Тёмная тема */
@@ -456,24 +455,6 @@ body {
     background-color: var(--badge-bg-secondary);
     color: var(--badge-text-color);
 }
-
-/* --- Обновлённые стили для бейджей --- */
-/* Бейдж "Подключен" (обычно bg-success) */
-/* Цвет текста уже задан в --badge-text-color, но для bg-success он белый, что ок */
-/* Бейдж "Подключение..." (обычно bg-warning) */
-/* Цвет текста уже задан в --badge-text-color, но для bg-warning он чёрный, что ок */
-/* Однако, если "Подключен" использует bg-success, его текст уже белый из --badge-text-color */
-/* Если "Подключен" использует bg-success и у него текст слишком тёмный, проверьте, какой класс используется */
-/* В вашем коде: <span class="badge @(IsConnected ? "bg-success" : "bg-warning") ms-2"> */
-/* @(IsConnected ? "Подключен" : "Подключение...")</span> */
-/* bg-success использует --badge-text-color (который белый для bg-success в светлой теме, но мы изменили его на чёрный для bg-warning в тёмной) */
-/* bg-warning использует --badge-text-color (который чёрный в тёмной теме для bg-warning, что может быть плохо на жёлтом фоне, но мы его сделали чёрным) */
-/* Всё зависит от bg-success и bg-warning. bg-success в тёмной теме использует --badge-bg-success (#198754) и --badge-text-color (#000000 в тёмной теме для bg-warning, но bg-success обычно белый текст). */
-/* Проверим bg-success в тёмной теме: */
-/* --badge-bg-success: #198754; --badge-text-color: #000000; */
-/* Это означает, что bg-success в тёмной теме будет иметь зелёный фон и ЧЁРНЫЙ текст! Это плохо. */
-/* Нужно разделить переменные для bg-success и bg-warning. */
-
 /* --- Разделим переменные для бейджей --- */
 :root {
     /* ... другие переменные ... */
