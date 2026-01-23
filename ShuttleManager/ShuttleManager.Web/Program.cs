@@ -1,4 +1,4 @@
-using ShuttleManager.Shared.Intefraces;
+using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Services;
 using ShuttleManager.Web.Components;
 

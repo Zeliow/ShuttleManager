@@ -1,5 +1,5 @@
 ﻿using System.Buffers;
-namespace ShuttleManager.Shared.Intefraces;
+namespace ShuttleManager.Shared.Interfaces;
 public interface ITcpClientService
 {
     /// <summary>

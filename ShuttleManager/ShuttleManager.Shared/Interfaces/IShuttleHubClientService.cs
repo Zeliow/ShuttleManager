@@ -1,9 +1,8 @@
 ﻿using ShuttleManager.Shared.Models;
-using System.Buffers.Text;
 using System.Net;
 using System.Text.Json.Nodes;
 
-namespace ShuttleManager.Shared.Intefraces;
+namespace ShuttleManager.Shared.Interfaces;
 
 
 public class ConnectedShuttleInfo

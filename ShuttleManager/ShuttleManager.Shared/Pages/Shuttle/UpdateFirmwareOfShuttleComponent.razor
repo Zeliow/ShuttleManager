@@ -1,0 +1,67 @@
+﻿@page "/esp-ota/{ShuttleIpAddress}"
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@* @attribute [SupplyParameterFromQuery] *@
+
+<h3>OTA Обновление Прошивки</h3>
+
+@if (string.IsNullOrEmpty(ShuttleIpAddress))
+{
+    <div class="alert alert-warning">
+        IP-адрес шаттла не указан.
+        <button class="btn btn-link btn-sm" @onclick="GoBack">Вернуться назад</button>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Веб-интерфейс ESP32 для шаттла: @ShuttleIpAddress</h5>
+            <button class="btn btn-sm btn-outline-secondary float-end" @onclick="GoBack" title="Закрыть OTA и вернуться">
+                <i class="bi bi-x-lg"></i> Закрыть
+            </button>
+        </div>
+
+        <div class="card-body p-0">
+            <!-- Пытаемся открыть WebView через JS Interop -->
+            <div id="ota-webview-container" style="width:100%; height:800px; border:none;"></div>
+            <button @onclick="OpenNativeWebView" class="btn btn-primary">Открыть нативный WebView</button>
+        </div>
+        <div class="card-footer text-muted">
+            <small>
+                Отображается веб-страница ESP32 по адресу <code>http://@ShuttleIpAddress</code>.
+                Убедитесь, что шаттл находится в режиме обновления (команда FRM выполнена).
+            </small>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string? ShuttleIpAddress { get; set; }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/"); // Или на нужный маршрут управления
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(ShuttleIpAddress))
+        {
+            Console.WriteLine($"OTA WebView компонент загружен для IP: {ShuttleIpAddress}");
+            // Здесь можно добавить проверку подключения к IP, если нужно
+        }
+    }
+
+    private async Task OpenNativeWebView()
+    {
+        if (!string.IsNullOrEmpty(ShuttleIpAddress))
+        {
+            // Вызов нативного метода через JS Interop
+            // Предполагается, что в wwwroot/index.html будет функция showNativeWebView
+            await JSRuntime.InvokeVoidAsync("showNativeWebView", $"http://{ShuttleIpAddress}/");
+            // Опционально: можно скрыть кнопку или показать индикатор
+        }
+    }
+}

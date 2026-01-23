@@ -1,4 +1,4 @@
-﻿namespace ShuttleManager.Shared.Intefraces;
+﻿namespace ShuttleManager.Shared.Interfaces;
 
 public interface IBrowserLauncherService
 {

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
-using ShuttleManager.Shared.Intefraces;
+using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);

@@ -1,6 +1,5 @@
 ﻿using Android.App;
 using Android.Runtime;
-using ShuttleManager.Platforms.Windows;
 
 
 namespace ShuttleManager.Platforms.Android

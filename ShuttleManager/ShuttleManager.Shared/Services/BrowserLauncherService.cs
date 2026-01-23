@@ -1,4 +1,4 @@
-﻿using ShuttleManager.Shared.Intefraces;
+﻿using ShuttleManager.Shared.Interfaces;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 namespace ShuttleManager.Shared.Services;

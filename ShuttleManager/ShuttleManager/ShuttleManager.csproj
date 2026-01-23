@@ -59,7 +59,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Folder Include="Services\" />
+		<Folder Include="Platforms\Windows\Services\" />
 	</ItemGroup>
 
 	<ItemGroup>

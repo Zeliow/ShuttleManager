@@ -1,4 +1,4 @@
-﻿using ShuttleManager.Shared.Intefraces;
+﻿using ShuttleManager.Shared.Interfaces;
 using System.Buffers;
 using System.Net.Sockets;
 namespace ShuttleManager.Shared.Services;
