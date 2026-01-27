@@ -41,7 +41,6 @@
         }
         else
         {
-            //telemetry old
             <div class="mb-3">
                 <div class="row">
                     <div class="col-md-3">
@@ -50,19 +49,6 @@
                             @BatteryData
                         </p>
                     </div>
-@*                     <div class="col-md-3">
-                        <label class="form-label small text-muted">Заряд:</label>
-                        <div class="progress" style="height: 20px;">
-                            <div class="progress-bar @GetBatteryProgressClass()"
-                                 role="progressbar"
-                                 style="width: @(BatteryPercentageValue)%;"
-                                 aria-valuenow="@BatteryPercentageValue"
-                                 aria-valuemin="0"
-                                 aria-valuemax="100">
-                                @BatteryPercentageValue%
-                            </div>
-                        </div>
-                    </div> *@
                     <div class="col-md-3">
                         <label class="form-label small text-muted">Статус:</label>
                         <p id="currentStatus_@ComponentId" class="fw-bold @GetStatusColorClass()">
@@ -78,30 +64,7 @@
                         <p class="small text-muted">@Uptime</p>
                     </div>
                 </div>
-
-@*                 <div class="row mt-2">
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Напряжение:</label>
-                        <p id="voltage_@ComponentId" class="fw-bold">
-                            @Voltage.ToString("F1") V
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Код ошибки:</label>
-                        <p id="errorCode_@ComponentId" class="fw-bold @(ErrorCode != 0 ? "text-danger" : "text-success")">
-                            @(ErrorCode == 0 ? "Нет" : ErrorCode.ToString())
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Код предупреждения:</label>
-                        <p id="warningCode_@ComponentId" class="fw-bold @(WarningCode != 0 ? "text-warning" : "text-success")">
-                            @(WarningCode == 0 ? "Нет" : WarningCode.ToString())
-                        </p>
-                    </div>                 
-                </div> *@
-
-            </div>
-            //telemetry old
+            </div>          
             <div class="container-fluid">
                 <div class="row">
                     <div class="col-md-7">
@@ -190,7 +153,7 @@
                                             </div>
                                            
                                             <div class="mb-1">
-                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="FilePock" title="OTA прошивка">
+                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaUpdate" title="OTA прошивка">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>!DEBUG! OTA прошивка
                                                 </button>
                                             </div>
@@ -387,10 +350,8 @@
     private int MaxSpeedInput = 0;
     private int MinPowerInput = 0; 
     private int PallentDistance = 0;
-
     private bool isAndroid => OperatingSystem.IsAndroid();
 
-    //private readonly List<string> _terminalLines = new();
     private string _terminalOutputHtml = "";
     private string _manualCommand = "";
     private string _componentId = Guid.NewGuid().ToString();
@@ -408,7 +369,6 @@
     private string BatteryData => $"Батарея: {Shuttle.BatteryVoltage:F1}V | Заряд: {Shuttle.BatteryPercentage}%";
     private bool IsConnected => Shuttle.IsConnected;
     private string ComponentId => _componentId;
-    //private List<string> TerminalLines => _terminalLines;
     private string TerminalOutputHtml => _terminalOutputHtml;
     private string ManualCommand { get => _manualCommand; set => _manualCommand = value; }
     private string pathLogShuttle = "";
@@ -883,11 +843,9 @@
         Process.Start("explorer.exe", way);
     }
 
-    private async Task FilePock()
+    private async Task OpenOtaUpdate()
     {
         await SendCommandAsync("FRM", "Прошивка");
-        await Task.Delay(1000);
-        Navigation.NavigateTo($"/esp-ota/{Shuttle.IPAddress}");
         //var result = await FilePickerService.PickFileAsync();
     }
 
@@ -907,11 +865,6 @@
     private async Task SendGoHomeCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dHome_", "Возвращение домой");
 
     private async Task SendSetTimeShuttleCommand() => await SendCommandAsync("DT", "Установка времени и даты");
-    // private async Task SendSetMaxSpeedShuttleCommand() => await SendCommandAsync("dSp", "Установка максимальной скорости");
-    // private async Task SendSetMinPowerShuttleCommand() => await SendCommandAsync("dBc", "Установка минимальной мощности");
-    // private async Task SendMoveForwardShuttleCommand() => await SendCommandAsync("dMr", "Проезд расстояния вперёд");
-    // private async Task SendSetMoveReverseShuttleCommand() => await SendCommandAsync("dMf", "Проезд расстояния назад");
-    // private async Task SendSetShuttleNumCommand() => await SendCommandAsync("dNN", "Установка номера шаттла");
     private async Task SendUseReverseModeShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dRevOn", "Реверс режим");
     private async Task SendSealingForwardShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dComFo", "Уплотнение вперед");
     private async Task SendSealingBackShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dComBa", "Уплотнение назад");
@@ -985,7 +938,6 @@
     private void ClearTerminal()
     {
         Shuttle.ClearTerminalMessage();
-        // _terminalLines.Clear();
         _terminalOutputHtml = "";
         StateHasChanged();
     }
@@ -995,26 +947,15 @@
         var lines = message.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
 
         Shuttle.AddTerminalMessage(message);
-        //_terminalLines.AddRange(lines);
 
         if (Shuttle.GetTerminalMessages().Count > 1000)
         {
             Shuttle.RemoveTerminalMessage();
         }
 
-        // if (_terminalLines.Count > 1000)
-        // {
-        //     _terminalLines.RemoveRange(0, _terminalLines.Count - 500);
-        // }
-
         _terminalOutputHtml = string.Join("",
             Shuttle.GetTerminalMessages().Select(line =>
                 $"<div class=\"terminal-line\">{System.Net.WebUtility.HtmlEncode(line)}</div>"));
-
-        // _terminalOutputHtml = string.Join("",
-        //     _terminalLines.Select(line =>
-        //         $"<div class=\"terminal-line\">{System.Net.WebUtility.HtmlEncode(line)}</div>"));
-
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }

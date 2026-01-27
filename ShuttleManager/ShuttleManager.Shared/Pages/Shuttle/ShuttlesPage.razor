@@ -46,33 +46,6 @@
                             Поиск на @(BaseIp).@(StartRange)-@(EndRange):@(Port)...
                         </div>
                     }
-
-@*                     @if (FoundDevices.Any())
-                    {
-                        <div>
-                            <h6>Найденные устройства:</h6>
-                            <ul class="list-group list-group-flush">
-                                @foreach (var ip in FoundDevices)
-                                {
-                                    <li class="list-group-item d-flex justify-content-between align-items-center"> @ip.ToString()
-                                        <button class="btn btn-sm btn-outline-success"
-                                                @onclick="() => HandleConnectClickIfNotConnected(ip.ToString())"
-                                                disabled="@IsAlreadyConnected(ip.ToString())">
-                                            @(IsAlreadyConnected(ip.ToString()) ? "Подключен" : "Подключить")
-                                        </button>
-                                    </li>
-                                }
-                            </ul>
-                        </div>
-                    }
-
-                    else if (ScanCompleted && !IsScanning && !FoundDevices.Any())
-                    {
-                        <div class="alert alert-secondary">
-                            Устройства не найдены.
-                        </div>
-                    } *@
-
                     @if (FoundDevices.Any())
                     {
                         <div>
@@ -95,9 +68,6 @@
                             Устройства не найдены.
                         </div>
                     }
-
-
-
                 </div>
             </div>
 
@@ -361,15 +331,13 @@
 
 
     /// component for dark theme 
-
-    private ElementReference toggleElement; // Для получения ссылки на элемент
+    private ElementReference toggleElement; 
     private bool IsDarkMode { get; set; } = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Попробуем восстановить тему из localStorage при первом рендере
             var savedTheme = await JSRuntime.InvokeAsync<string>("eval", "localStorage.getItem('user-theme-preference');");
 
             if (savedTheme != null)
@@ -378,15 +346,13 @@
             }
             else
             {
-                // Опционально: определить системную тему при первом запуске
                 var systemPrefersDark = await JSRuntime.InvokeAsync<bool>("eval", "window.matchMedia('(prefers-color-scheme: dark)').matches;");
                 IsDarkMode = systemPrefersDark;
-                // Сохраняем как начальное предпочтение
                 await JSRuntime.InvokeVoidAsync("eval", $"localStorage.setItem('user-theme-preference', '{(IsDarkMode ? "dark" : "light")}');");
             }
 
             await ApplyThemeAsync(IsDarkMode);
-            StateHasChanged(); // Обновим UI, чтобы тумблер отразил состояние
+            StateHasChanged();
         }
     }
 
@@ -399,17 +365,15 @@
         Console.WriteLine($"[DEBUG] ApplyThemeAsync called, isDark={isDark}, themeValue='{themeValue}'");
     }
 
-    // Обработчик изменения состояния тумблера через @onchange
     private async Task OnDarkModeChanged(ChangeEventArgs e)
     {
-        // Получаем новое состояние чекбокса из аргумента события
         var newValue = e.Value is bool b ? b : Convert.ToBoolean(e.Value);
         Console.WriteLine($"[DEBUG] OnDarkModeChanged fired, raw value: {e.Value}, parsed bool: {newValue}");
 
         if (IsDarkMode != newValue)
         {
-            IsDarkMode = newValue; // Обновляем локальное состояние
-            await ApplyThemeAsync(newValue); // Применяем новую тему
+            IsDarkMode = newValue;
+            await ApplyThemeAsync(newValue);
         }
     }
 }
