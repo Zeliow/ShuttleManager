@@ -47,6 +47,16 @@
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
 
+
+	<ItemGroup>
+	  <AndroidResource Remove="Platforms\Windows\Services\**" />
+	  <Compile Remove="Platforms\Windows\Services\**" />
+	  <Content Remove="Platforms\Windows\Services\**" />
+	  <EmbeddedResource Remove="Platforms\Windows\Services\**" />
+	  <MauiXaml Remove="Platforms\Windows\Services\**" />
+	  <None Remove="Platforms\Windows\Services\**" />
+	</ItemGroup>
+
 	<!-- УДАЛИТЬ ВСЕ ЛИШНИЕ ПАКЕТЫ ПРОДОЛЖАЙТЕ -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
@@ -56,10 +66,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\ShuttleManager.Shared\ShuttleManager.Shared.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Folder Include="Platforms\Windows\Services\" />
 	</ItemGroup>
 
 	<ItemGroup>
