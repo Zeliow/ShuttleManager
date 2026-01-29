@@ -15,7 +15,7 @@ namespace ShuttleManager.Shared.Services
         public event Action<string, string>? LogReceived;
         public event Action<string, int>? Connected;
         public event Action<string>? Disconnected;
-        public event Action<string>? ShuttleDataUpdated; // Новое событие
+        //public event Action<string>? ShuttleDataUpdated; // Новое событие
         private readonly Dictionary<string, ShuttleConnection> _connections = new();
         private readonly object _lock = new object(); // Защита доступа к _connections
 

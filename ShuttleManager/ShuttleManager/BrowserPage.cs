@@ -1,6 +1,6 @@
 ﻿namespace ShuttleManager;
 
-public class BrowserPage : ContentPage
+public partial class BrowserPage : ContentPage
 {
     private readonly WebView _webView;
     private readonly ActivityIndicator _loading;

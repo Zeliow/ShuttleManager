@@ -103,10 +103,4 @@ public class Shuttle
             return new List<string>(_terminalMessages);
         }
     }
-
-    // Метод для обновления статуса соединения
-    //public void SetConnectionStatus(bool isConnected)
-    //{
-    //    IsConnected = isConnected;
-    //}
 }

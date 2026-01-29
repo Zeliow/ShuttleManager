@@ -364,7 +364,7 @@
     private string _manualCommand = "";
     private string _componentId = Guid.NewGuid().ToString();
     private bool _isCommandInProgress;
-    private int _connectionAttempts;
+    private int _connectionAttempts = 0;
     private CancellationTokenSource _componentCts = new();
 
     private string CurrentStatus => Shuttle.CurrentStatus;
@@ -785,7 +785,14 @@
             var displayCommand = string.IsNullOrEmpty(description) ? command : $"{command} ({description})";
             LogToTerminal($"[CMD] Отправка: {displayCommand}\n");
 
-            var success = await HubClientService.SendCommandToShuttleAsync(Shuttle.IPAddress, command, 1000);
+            if (Shuttle.IPAddress is null)
+            {
+                throw new Exception("error with null IP");
+            }
+            else
+            {
+                var success = await HubClientService.SendCommandToShuttleAsync(Shuttle.IPAddress, command, 1000);
+            }           
         }
         catch (OperationCanceledException)
         {
@@ -944,9 +951,17 @@
 
     private async Task DisconnectThis()
     {
-        HubClientService.DisconnectFromShuttle(Shuttle.IPAddress);
-        LogToTerminal("[INFO] Запрошено отключение\n");
-        await OnDisconnected.InvokeAsync(Shuttle.IPAddress);
+        if (Shuttle.IPAddress == null)
+        {
+            throw new Exception("ip is null");
+        }
+        else
+        {
+            HubClientService.DisconnectFromShuttle(Shuttle.IPAddress);
+            LogToTerminal("[INFO] Запрошено отключение\n");
+            await OnDisconnected.InvokeAsync(Shuttle.IPAddress);
+        }
+        
     }
 
     private void ClearTerminal()

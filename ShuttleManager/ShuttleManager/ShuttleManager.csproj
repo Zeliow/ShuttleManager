@@ -25,12 +25,11 @@
 		<ApplicationIcon>Resources\AppIcon\appicon.ico</ApplicationIcon>
 	</PropertyGroup>
 
-	<!-- КОНФИГУРАЦИЯ ТОЛЬКО ДЛЯ WINDOWS -->
-
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
-		<!--ВАЖНО: Используем специальный флаг для Windows App SDK, а не обычный SelfContained-->
 		<SingleProjectMsix>false</SingleProjectMsix>
-		<PublishSingleFile>true</PublishSingleFile>
+		<PublishSingleFile>true</PublishSingleFile>	
+		<!-- test container (self) in not work - delete-->
+		<SelfContained>true</SelfContained>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<PublishReadyToRun>true</PublishReadyToRun>
@@ -57,7 +56,6 @@
 	  <None Remove="Platforms\Windows\Services\**" />
 	</ItemGroup>
 
-	<!-- УДАЛИТЬ ВСЕ ЛИШНИЕ ПАКЕТЫ ПРОДОЛЖАЙТЕ -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
