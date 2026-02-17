@@ -1,5 +1,4 @@
-﻿
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Sockets;
@@ -8,7 +7,6 @@ namespace ShuttleManager.Shared.Services.OtaUpdate;
 
 public sealed class OtaUpdateService : IOtaUpdateService
 {
-
     private readonly ILogger<OtaUpdateService> _logger;
 
     public OtaUpdateService(ILogger<OtaUpdateService> logger) => _logger = logger;
@@ -65,10 +63,10 @@ public sealed class OtaUpdateService : IOtaUpdateService
         IProgress<OtaProgress>? progress,
         CancellationToken token)
     {
-
         _logger.LogInformation("Starting STM32 OTA update to {Ip}", ip);
 
         using var client = new TcpClient();
+        client.NoDelay = true;
         await client.ConnectAsync(ip, STM_PORT);
         using var stream = client.GetStream();
 
@@ -105,7 +103,7 @@ public sealed class OtaUpdateService : IOtaUpdateService
             await EnsureOk(stream, token);
 
             offset += len;
-            
+
             progress?.Report(new OtaProgress(offset, fw.Length));
         }
         _logger.LogDebug("Sending CMD_RUN");
@@ -125,6 +123,7 @@ public sealed class OtaUpdateService : IOtaUpdateService
         CancellationToken token)
     {
         using var client = new TcpClient();
+        client.NoDelay = true;
         await client.ConnectAsync(ip, ESP_PORT);
         using var stream = client.GetStream();
 
@@ -185,10 +184,8 @@ public sealed class OtaUpdateService : IOtaUpdateService
             Console.WriteLine("Received unexpected response: 0x{Resp:X2}", buffer);
             throw new InvalidOperationException($"Device returned FAIL: {buffer}");
         }
-            
     }
 }
-
 
 public enum OtaTarget
 {
@@ -213,5 +210,6 @@ public sealed class OtaResult
     }
 
     public static OtaResult Success() => new(true, null);
+
     public static OtaResult Fail(string err) => new(false, err);
 }
