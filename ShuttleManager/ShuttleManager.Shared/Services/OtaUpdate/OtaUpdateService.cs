@@ -30,7 +30,8 @@ public sealed class OtaUpdateService : IOtaUpdateService
         string filePath,
         OtaTarget target,
         IProgress<OtaProgress>? progress,
-        CancellationToken token)
+        CancellationToken token,
+        bool fullErase = false)
     {
         if (!File.Exists(filePath))
             return OtaResult.Fail($"File not found {filePath}");
@@ -43,10 +44,10 @@ public sealed class OtaUpdateService : IOtaUpdateService
 
         try
         {
-            _logger.LogInformation("Initiating OTA Update for {Target} on {Ip}. File size: {Size} bytes", target, ip, firmware.Length);
+            _logger.LogInformation("Initiating OTA Update for {Target} on {Ip}. File size: {Size} bytes. Full Erase: {FullErase}", target, ip, firmware.Length, fullErase);
 
             var result = target == OtaTarget.Stm32
-                ? await RunStmAsync(ip, firmware, progress, token)
+                ? await RunStmAsync(ip, firmware, progress, token, fullErase)
                 : await RunEspAsync(ip, firmware, progress, token);
 
             stopWatch.Stop();
@@ -78,7 +79,8 @@ public sealed class OtaUpdateService : IOtaUpdateService
     string ip,
     byte[] fw,
     IProgress<OtaProgress>? progress,
-    CancellationToken token)
+    CancellationToken token,
+    bool fullErase)
     {
         using var client = new TcpClient();
         client.NoDelay = true;
@@ -96,9 +98,14 @@ public sealed class OtaUpdateService : IOtaUpdateService
         _logger.LogInformation("[STM] Bootloader Initialized.");
 
         // 2. ERASE
-        _logger.LogInformation("[STM] Sending CMD_ERASE (Mass Erase - This may take 30-45s)...");
+        string eraseMode = fullErase ? "MASS ERASE (Deleting Config)" : "Smart Erase (Preserving Config)";
+        _logger.LogInformation("[STM] Sending CMD_ERASE ({Mode} - This may take 30-45s)...", eraseMode);
         stream.ReadTimeout = 60000;
+
         await SendByte(stream, CMD_ERASE, token);
+        // Send Erase Mode Byte: 0x01 = Full, 0x00 = Smart
+        await SendByte(stream, fullErase ? (byte)0x01 : (byte)0x00, token);
+
         await EnsureOk(stream, token);
         _logger.LogInformation("[STM] Flash Erased.");
 
@@ -251,7 +258,7 @@ public enum OtaTarget
 
 public sealed record OtaProgress(long Sent, long Total)
 {
-    public int Percent => (int)((Sent * 100) / Total);
+    public int Percent => (int)((Sent * 60) / Total);
 }
 
 public sealed class OtaResult

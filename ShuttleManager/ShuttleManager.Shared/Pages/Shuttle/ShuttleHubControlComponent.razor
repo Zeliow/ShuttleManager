@@ -322,8 +322,8 @@
                                             </div>
                                             <div class="col-12 mb-1">
                                                 <div class="input-group input-group-sm">
-                                                    <InputNumber @bind-Value="LenghtOfShuttle" class="form-control form-control-sm" min="0" max="5000" step="10" placeholder="=Длина шаттла" />
-                                                    <button class="btn btn-secondary btn-sm w-75" value="0" @onclick="SendSetlenghtOfShuttleCommand" title="Установить длину шаттла">
+                                                    <InputNumber @bind-Value="LenghtOfShuttle" class="form-control form-control-sm" min="800" max="1200" step="200" placeholder="=Длина шаттла" />
+                                                    <button class="btn btn-secondary btn-sm w-75" value="800" @onclick="SendSetlenghtOfShuttleCommand" title="Установить длину шаттла">
                                                         Длина шаттла, мм 📏
                                                     </button>
                                                 </div>
@@ -354,18 +354,19 @@
                                     <div class="card-body p-2">
                                         <button @onclick="ChoiceFile">Select .bin</button>
 
-                                        @if (_selectedFile != null)
+                                        @* @if (_selectedFile != null)
                                         {
-                                            <p>@_selectedFile</p>
+                                        <p>@_selectedFile</p>*@
+                                        <label for="Erase">full erase STM: </label>
+                                        <input type="checkbox" id="IsArase" name="Erase" checked="@IsFullErased" @onchange="OnAraseModeChanged" />
+                                        <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
+                                            Update STM
+                                        </button>
 
-                                            <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
-                                                Update STM
-                                            </button>
-
-                                            <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">
-                                                Update ESP
-                                            </button>
-                                        }
+                                        <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">
+                                            Update ESP
+                                        </button>
+                                        @*  } *@
 
                                         @if (_isOtaRunning)
                                         {
@@ -394,7 +395,7 @@
     private int MoveDistanceBackwardInput = 0;
     private int MoveDistanceForwardInput = 0;
     private int DistanceOfEdge = 0;
-    private int LenghtOfShuttle = 0;
+    private int LenghtOfShuttle = 800;
     private int MaxSpeedInput = 0;
     private int MinPowerInput = 0;
     private int PallentDistance = 0;
@@ -407,6 +408,7 @@
     private bool _isCommandInProgress;
     private int _connectionAttempts = 0;
     private CancellationTokenSource _componentCts = new();
+    private bool IsFullErased = false;
 
     private string CurrentStatus => Shuttle.CurrentStatus;
     private int ErrorCode => Shuttle.ErrorCode;
@@ -457,6 +459,8 @@
 
     private async Task StartOta(OtaTarget target)
     {
+        await ChoiceFile();
+
         if (_selectedFile == null)
             return;
 
@@ -473,15 +477,13 @@
 
         try
         {
-            // // читаем файл в массив байт
-            // byte[] firmwareBytes = await File.ReadAllBytesAsync(_selectedFile);
-
             var result = await OtaService.RunAsync(
                 Shuttle.IPAddress!,
                 _selectedFile,
                 target,
                 progress,
-                _otaCts.Token
+                _otaCts.Token,
+                IsFullErased
             );
 
             _otaStatus = result.IsSuccess ? "OTA Completed" : $"Error: {result.Error}";
@@ -872,6 +874,11 @@
         }
         string way = Path.Combine(AppContext.BaseDirectory, "logs");
         Process.Start("explorer.exe", way);
+    }
+
+    private async Task OnAraseModeChanged()
+    {
+        IsFullErased = !IsFullErased;
     }
 
     private async Task OpenOtaDisplayUpdate()
