@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Sockets;
@@ -17,6 +17,7 @@ public class Shuttle
     public TcpClient? Client { get; }
     public bool LoggingStatus { get; set; }
     public bool IsFormOpened { get; set; }
+    public int CurrentSpeed { get; set; }
     public int MaxSpeed { get; set; }
     public int InterPalleteDistance { get; set; }
     public int ShuttleLength { get; set; }
@@ -54,6 +55,19 @@ public class Shuttle
     public int WaitTimeUnload { get; set; } = 0;
     public string ConnectionStatus { get; set; } = "Offline";
     public DateTime LastConnectionCheck { get; set; } = DateTime.MinValue;
+
+    // New stats properties
+    public uint TotalDist { get; set; }
+    public uint LoadCounter { get; set; }
+    public uint UnloadCounter { get; set; }
+    public uint CompactCounter { get; set; }
+    public uint LiftUpCounter { get; set; }
+    public uint LiftDownCounter { get; set; }
+    public int PalleteCount { get; set; }
+
+    // Raw flags
+    public ushort StateFlags { get; set; }
+    public byte HardwareFlags { get; set; }
 
     public string FullStatusBlock { get; set; } = "";
     private List<string> _terminalMessages = [];
