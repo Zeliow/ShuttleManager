@@ -13,6 +13,7 @@
 @inject IWebBrowserService WebBrowserService
 @inject IFilePickerService FilePickerService
 @inject IOtaUpdateService OtaService
+@implements IDisposable
 
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -131,11 +132,11 @@
                                 <div class="card-body p-2">
                                     <div class="row g-1">
                                         <div class="col-6">
-                                            <div class="mb-1">
+                                            @*  <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaDisplayUpdate" title="OTA Display">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>⚠️display firmware
                                                 </button>
-                                            </div>
+                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>Обновление прошивки экрана (UPD) (Browser)
@@ -148,11 +149,11 @@
                                             </div>
                                         </div>
                                         <div class="col-6">
-                                            <div class="mb-1">
+                                            @*   <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaStmUpdate" title="OTA STM">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>⚠️STM firmware
                                                 </button>
-                                            </div>
+                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
                                                     <i class="bi bi-cloud-arrow-up me-1"></i>Обновление прошивки платы (FRM) (Browser)
@@ -349,33 +350,40 @@
                             <div class="col-12">
                                 <div class="card">
                                     <div class="card-header p-1">
-                                        <h6 class="fw-bold text-muted mb-0">Параметры</h6>
+                                        <h6 class="fw-bold text-muted mb-0">Обновление</h6>
                                     </div>
                                     <div class="card-body p-2">
+                                        @*
                                         <button @onclick="ChoiceFile">Select .bin</button>
 
-                                        @* @if (_selectedFile != null)
+                                        @if (_selectedFile != null)
                                         {
                                         <p>@_selectedFile</p>*@
-                                        <label for="Erase">full erase STM: </label>
-                                        <input type="checkbox" id="IsArase" name="Erase" checked="@IsFullErased" @onchange="OnAraseModeChanged" />
-                                        <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
-                                            Update STM
-                                        </button>
 
-                                        <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">
-                                            Update ESP
-                                        </button>
+                                        <div class="row g-1">
+                                            <div class="col-6 mb-1" style="text-align: center;">
+                                                <button class="btn btn-warning btn-sm w-100" disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
+                                                    <i>Обновить STM</i>
+                                                </button>
+                                                <label for="Erase">full erase STM: </label>
+                                                <input type="checkbox" id="IsArase" name="Erase" checked="@IsFullErased" @onchange="OnAraseModeChanged" />
+                                            </div>
+                                            <div class="col-6 mb-1">
+                                                <button class="btn btn-warning btn-sm w-100" disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">
+                                                    <i>Обновить ESP</i>
+                                                </button>
+                                            </div>
+                                        </div>
                                         @*  } *@
 
                                         @if (_isOtaRunning)
                                         {
                                             <progress value="@_otaPercent" max="100"></progress>
                                             <p>@_otaPercent %</p>
-                                            <button @onclick="CancelOta">Cancel</button>
+                                            <button @onclick="CancelOta">Отмена</button>
                                         }
 
-                                        <p>@_otaStatus</p>
+                                        <i>@_otaStatus</i>
                                     </div>
                                 </div>
                             </div>
@@ -549,7 +557,7 @@
         });
     }
 
-    private async void OnTelemetryReceived(string ip, JsonNode telemetry)
+    private async Task OnTelemetryReceived(string ip, JsonNode telemetry)
     {
         if (!IsEventForThisShuttle(ip)) return;
 
@@ -1098,6 +1106,9 @@
 
         _componentCts.Cancel();
         _componentCts.Dispose();
+
+        _otaCts.Cancel();
+        _otaCts.Dispose();
 
         HubClientService.Connected -= OnHubConnected;
         HubClientService.Disconnected -= OnHubDisconnected;
