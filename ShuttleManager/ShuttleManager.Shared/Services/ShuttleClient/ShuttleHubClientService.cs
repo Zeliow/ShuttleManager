@@ -1,32 +1,35 @@
-﻿using ShuttleManager.Shared.Models;
+using ShuttleManager.Shared.Models;
+using ShuttleManager.Shared.Models.Protocol;
+using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient
 {
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     {
-        public event Action<string, string>? LogReceived;
+        public event Action<string, ShuttleMessageBase>? LogReceived;
         public event Action<string, int>? Connected;
         public event Action<string>? Disconnected;
+
         private readonly Dictionary<string, ShuttleConnection> _connections = [];
+        private readonly ConcurrentDictionary<byte, TaskCompletionSource<bool>> _ackWaiters = new();
         private readonly object _lock = new();
 
         private class ShuttleConnection
         {
             public TcpClient? TcpClient { get; set; }
             public Stream? NetworkStream { get; set; }
-            public StreamReader? Reader { get; set; }
-            public StreamWriter? Writer { get; set; }
             public CancellationTokenSource? ReceiveCts { get; set; }
-            public bool IsStartStream { get; set; } = false;
             public Task? ReceiveTask { get; set; }
             public int ShuttleId { get; set; } = -1;
             public string IpAddress { get; set; } = string.Empty;
             public readonly MemoryStream ReceiveBuffer = new();
+            public byte NextSeq { get; set; } = 0;
         }
 
         public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000)
@@ -34,7 +37,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             var foundDevices = new List<IPAddress>();
             var tasks = new List<Task>();
 
-            //перебор подсети 
             for (int i = startIp; i <= endIp; i++)
             {
                 string ip = $"{baseIp}.{i}";
@@ -99,24 +101,25 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
         public async Task ConnectToShuttleAsync(string ipAddress, int port)
         {
-            lock (_lock) {}
+            lock (_lock) { } // Keeping existing lock pattern
 
             var connection = new ShuttleConnection { IpAddress = ipAddress };
 
             try
             {
                 Debug.WriteLine("Старт TCP контакта для прямого подключнения");
-                OnLogReceived(connection.IpAddress, "start Message");
+                OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = "Connecting..." });
+
                 connection.TcpClient = new TcpClient();
                 await connection.TcpClient.ConnectAsync(ipAddress, port);
-                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60); // 1 минут
-                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 60); // 1 минута
-                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
-                connection.NetworkStream = connection.TcpClient.GetStream();
-                connection.Writer = new StreamWriter(connection.NetworkStream) { AutoFlush = true };
 
-                string? handshakeLine = await ReadLineAsync(connection);
+                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
+                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 60);
+                connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
+
+                connection.NetworkStream = connection.TcpClient.GetStream();
+
                 OnConnected(ipAddress, connection.ShuttleId);
              
                 connection.ReceiveCts = new CancellationTokenSource();
@@ -134,79 +137,28 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
         }
 
-        private async Task<string?> ReadLineAsync(ShuttleConnection connection, CancellationToken cancellationToken = default)
-        {
-            if (!connection.IsStartStream)
-            {
-                connection.IsStartStream = true;
-                return "start stream!";
-            }
-
-            const int BufferSize = 512;
-            byte[] readBuffer = new byte[BufferSize];
-
-            while (true)
-            {
-                byte[] currentBufferData = connection.ReceiveBuffer.ToArray();
-                int newlineIndex = Array.IndexOf(currentBufferData, (byte)'\n');
-
-                if (newlineIndex >= 0)
-                {
-                    string line = System.Text.Encoding.UTF8.GetString(currentBufferData, 0, newlineIndex);
-                    connection.ReceiveBuffer.SetLength(0);
-                    if (newlineIndex + 1 < currentBufferData.Length)
-                    {
-                        connection.ReceiveBuffer.Write(currentBufferData, newlineIndex + 1, currentBufferData.Length - newlineIndex - 1);
-                    }
-                    if (line.Length > 0 && line[^1] == '\r')
-                        line = line[..^1];
-
-                    return line;
-                }
-                int bytesRead = await connection.NetworkStream!.ReadAsync(readBuffer, 0, readBuffer.Length, cancellationToken);
-                if (bytesRead == 0)
-                {
-                    if (connection.ReceiveBuffer.Length == 0)
-                        return null;
-
-                    string partialLine = System.Text.Encoding.UTF8.GetString(connection.ReceiveBuffer.ToArray());
-                    connection.ReceiveBuffer.SetLength(0);
-                    if (partialLine.Length > 0 && partialLine[^1] == '\r')
-                        partialLine = partialLine[..^1];
-                    return partialLine;
-                }
-
-                connection.ReceiveBuffer.Write(readBuffer, 0, bytesRead);
-                if (connection.ReceiveBuffer.Length > 4096)
-                {
-                    Debug.WriteLine($"[ShuttleHubClientService] Слишком длинная строка (>4KB), сброс буфера");
-                    connection.ReceiveBuffer.SetLength(0);
-                    return string.Empty;
-                }
-            }
-        }
-
         private async Task ReceiveLoopAsync(ShuttleConnection connection, CancellationToken cancellationToken)
         {
+            byte[] buffer = new byte[1024];
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
-                    string? line = await ReadLineAsync(connection, cancellationToken);
+                    if (connection.NetworkStream == null) break;
 
-                    Debug.WriteLine($"[ShuttleHubClientService] ReceiveLoop: Получена строка от {connection.IpAddress}: '{line}'");
-
-                    if (line == null)
+                    int bytesRead = await connection.NetworkStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                    if (bytesRead == 0)
                     {
-                        Debug.WriteLine($"[ShuttleHubClientService] Соединение с {connection.IpAddress} закрыто сервером (получен null).");
+                        Debug.WriteLine($"[ShuttleHubClientService] Соединение с {connection.IpAddress} закрыто сервером (0 bytes).");
                         await InternalDisconnectAsync(connection.IpAddress);
                         break;
                     }
-                    OnLogReceived(connection.IpAddress, line);
+
+                    connection.ReceiveBuffer.Write(buffer, 0, bytesRead);
+                    ProcessBuffer(connection);
                 }
                 catch (OperationCanceledException)
                 {
-                    Debug.WriteLine($"[ShuttleHubClientService] ReceiveLoop для {connection.IpAddress} отменён.");
                     break;
                 }
                 catch (Exception ex)
@@ -218,85 +170,338 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
             Debug.WriteLine($"[ShuttleHubClientService] ReceiveLoop завершён для {connection.IpAddress}");
         }
+
+        private void ProcessBuffer(ShuttleConnection connection)
+        {
+            byte[] data = connection.ReceiveBuffer.ToArray();
+            int offset = 0;
+            bool processedAny = false;
+
+            while (offset < data.Length)
+            {
+                // 1. Look for Sync (0xAA 0x55)
+                int syncIndex = -1;
+                for (int i = offset; i < data.Length - 1; i++)
+                {
+                    if (data[i] == 0xAA && data[i + 1] == 0x55)
+                    {
+                        syncIndex = i;
+                        break;
+                    }
+                }
+
+                // 2. Look for Newline (legacy text support)
+                int newlineIndex = Array.IndexOf(data, (byte)'\n', offset);
+
+                // Priority: Binary Frame if Sync exists and (no newline OR Sync is before newline)
+                if (syncIndex != -1 && (newlineIndex == -1 || syncIndex < newlineIndex))
+                {
+                    // Check Header Size (6 bytes)
+                    if (data.Length - syncIndex < 6)
+                    {
+                        // Not enough data for header, keep buffer from syncIndex
+                        if (syncIndex > offset) processedAny = true;
+                        offset = syncIndex;
+                        break; // Need more data
+                    }
+
+                    // Read Header
+                    // Sync1(1), Sync2(1), Length(2), Seq(1), MsgID(1)
+                    ushort payloadLength = BinaryPrimitives.ReadUInt16LittleEndian(new ReadOnlySpan<byte>(data, syncIndex + 2, 2));
+
+                    int totalFrameSize = 6 + payloadLength + 2; // Header + Payload + CRC
+
+                    if (data.Length - syncIndex < totalFrameSize)
+                    {
+                        // Not enough data for full frame
+                        if (syncIndex > offset) processedAny = true;
+                        offset = syncIndex;
+                        break; // Need more data
+                    }
+
+                    // Validate CRC
+                    ushort receivedCrc = BinaryPrimitives.ReadUInt16LittleEndian(new ReadOnlySpan<byte>(data, syncIndex + 6 + payloadLength, 2));
+                    ushort calculatedCrc = Crc16Ccitt(new ReadOnlySpan<byte>(data, syncIndex, 6 + payloadLength));
+
+                    if (receivedCrc == calculatedCrc)
+                    {
+                        // Valid Frame
+                        byte seq = data[syncIndex + 4];
+                        byte msgId = data[syncIndex + 5];
+                        var payload = new ReadOnlySpan<byte>(data, syncIndex + 6, payloadLength);
+
+                        HandleBinaryMessage(connection, (MsgID)msgId, payload, seq);
+
+                        offset = syncIndex + totalFrameSize;
+                        processedAny = true;
+                    }
+                    else
+                    {
+                        // Invalid CRC - skip sync bytes and try finding next sync
+                        Debug.WriteLine($"[ShuttleHubClientService] CRC Mismatch from {connection.IpAddress}");
+                        offset = syncIndex + 2;
+                        processedAny = true;
+                    }
+                }
+                else if (newlineIndex != -1)
+                {
+                    // Found newline before any sync -> Text line
+                    int length = newlineIndex - offset;
+                    if (length > 0)
+                    {
+                        string line = Encoding.UTF8.GetString(data, offset, length).Trim();
+                        if (line.Length > 0 && line[^1] == '\r') line = line[..^1];
+
+                        if (!string.IsNullOrWhiteSpace(line))
+                        {
+                            OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = line });
+                        }
+                    }
+                    offset = newlineIndex + 1; // Skip \n
+                    processedAny = true;
+                }
+                else
+                {
+                    // No Sync, No Newline found in remaining data
+                    // If buffer is getting huge without sync or newline, we might want to discard
+                    // But for now, we wait for more data.
+                    break;
+                }
+            }
+
+            if (processedAny)
+            {
+                connection.ReceiveBuffer.SetLength(0);
+                if (offset < data.Length)
+                {
+                    connection.ReceiveBuffer.Write(data, offset, data.Length - offset);
+                }
+            }
+        }
+
+        private void HandleBinaryMessage(ShuttleConnection connection, MsgID msgId, ReadOnlySpan<byte> payload, byte seq)
+        {
+            ShuttleMessageBase? message = null;
+
+            switch (msgId)
+            {
+                case MsgID.MSG_HEARTBEAT:
+                    if (payload.Length >= Marshal.SizeOf<TelemetryPacket>())
+                        message = new TelemetryMessage { Data = MemoryMarshal.Read<TelemetryPacket>(payload) };
+                    break;
+                case MsgID.MSG_SENSORS:
+                    if (payload.Length >= Marshal.SizeOf<SensorPacket>())
+                        message = new SensorMessage { Data = MemoryMarshal.Read<SensorPacket>(payload) };
+                    break;
+                case MsgID.MSG_STATS:
+                    if (payload.Length >= Marshal.SizeOf<StatsPacket>())
+                        message = new StatsMessage { Data = MemoryMarshal.Read<StatsPacket>(payload) };
+                    break;
+                case MsgID.MSG_LOG:
+                    if (payload.Length >= 1)
+                    {
+                        var level = (LogLevel)payload[0];
+                        var text = Encoding.UTF8.GetString(payload.Slice(1));
+                        message = new RawLogMessage { Level = level, Text = text };
+                    }
+                    break;
+                case MsgID.MSG_CONFIG_SET:
+                case MsgID.MSG_CONFIG_GET:
+                case MsgID.MSG_CONFIG_REP:
+                    if (payload.Length >= Marshal.SizeOf<ConfigPacket>())
+                        message = new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) };
+                    break;
+                case MsgID.MSG_ACK:
+                    if (payload.Length >= Marshal.SizeOf<AckPacket>())
+                    {
+                        var ackData = MemoryMarshal.Read<AckPacket>(payload);
+                        message = new AckMessage { Data = ackData };
+                        HandleAck(ackData);
+                    }
+                    break;
+            }
+
+            if (message != null)
+            {
+                OnLogReceived(connection.IpAddress, message);
+            }
+        }
+
+        private void HandleAck(AckPacket ack)
+        {
+            if (_ackWaiters.TryRemove(ack.RefSeq, out var tcs))
+            {
+                if (ack.Result == 0) tcs.TrySetResult(true);
+                else tcs.TrySetResult(false);
+            }
+        }
+
+        private static ushort Crc16Ccitt(ReadOnlySpan<byte> data)
+        {
+            ushort crc = 0xFFFF;
+            foreach (byte b in data)
+            {
+                crc ^= (ushort)(b << 8);
+                for (int i = 0; i < 8; i++)
+                {
+                    if ((crc & 0x8000) != 0)
+                        crc = (ushort)((crc << 1) ^ 0x1021);
+                    else
+                        crc <<= 1;
+                }
+            }
+            return crc;
+        }
+
         public async Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs = 1000)
+        {
+            // Legacy method wrapper - assumes command string maps to something,
+            // but since we moved to binary, we should ideally use SendBinaryCommandAsync.
+            // For now, let's just log or ignore if we can't map it.
+            // OR: We can send it as a raw text line if the device supports it?
+            // The protocol definition implies ONLY binary frames.
+            // So we must map string to CmdType if possible.
+            // But this method signature is fixed by Interface (which we will update).
+            // I'll leave it as a placeholder that fails or tries to map basic commands.
+
+            // NOTE: The UI calls this with "dStop_", etc.
+            // I will implement a basic mapping in UI component, but here let's just return false
+            // or try to send binary if we can guess.
+            // Actually, I should update the Interface to remove this or change it.
+            // For now, I'll keep it for compilation compatibility but it won't work with binary protocol.
+            Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync(string) is deprecated. Use SendBinaryCommandAsync.");
+            return false;
+        }
+
+        public async Task<bool> SendBinaryCommandAsync(string ipAddress, CmdType cmd, int arg1 = 0, int arg2 = 0, int timeoutMs = 1000)
         {
             ShuttleConnection? connection;
             lock (_lock)
             {
-                if (!_connections.TryGetValue(ipAddress, out var conn))
-                {
-                    Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync: Нет активного соединения для {ipAddress}.");
-                    return false;
-                }
+                if (!_connections.TryGetValue(ipAddress, out var conn)) return false;
                 connection = conn;
             }
-            return await SendCommandInternalAsync(connection, command, timeoutMs);
-        }
 
-        private async Task<bool> SendCommandInternalAsync(ShuttleConnection connection, string command, int timeoutMs)
-        {
-            if (connection.Writer == null)
+            if (connection.NetworkStream == null) return false;
+
+            byte seq = connection.NextSeq++;
+
+            var cmdPacket = new CommandPacket
             {
-                Debug.WriteLine($"[ShuttleHubClientService] SendCommandInternalAsync: Нет активного соединения для {connection.IpAddress} (Writer null).");
-                return false;
-            }
+                CmdType = (byte)cmd,
+                Arg1 = arg1,
+                Arg2 = arg2
+            };
+
+            int payloadSize = Marshal.SizeOf(cmdPacket);
+            int frameSize = 6 + payloadSize + 2;
+            byte[] frame = new byte[frameSize];
+
+            // Header
+            frame[0] = 0xAA;
+            frame[1] = 0x55;
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
+            frame[4] = seq;
+            frame[5] = (byte)MsgID.MSG_COMMAND;
+
+            // Payload
+            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cmdPacket);
+
+            // CRC
+            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
 
             try
             {
-                await connection.Writer.WriteLineAsync(command);
+                var tcs = new TaskCompletionSource<bool>();
+                _ackWaiters[seq] = tcs;
 
+                // Cancel waiter after timeout
                 var cts = new CancellationTokenSource(timeoutMs);
-                connection.ReceiveBuffer.SetLength(0);
-                await connection.Writer.WriteLineAsync(command);
-                await connection.Writer.FlushAsync();
-                var ackTask = ReadLineAsync(connection);
-                var delayTask = Task.Delay(Timeout.Infinite, cts.Token);
-
-                var completedTask = await Task.WhenAny(ackTask, delayTask);
-
-                if (completedTask == delayTask)
+                cts.Token.Register(() =>
                 {
-                    cts.Dispose();
-                    Debug.WriteLine($"[ShuttleHubClientService] Таймаут ожидания подтверждения для команды: {command} от {connection.IpAddress}");
-                    return false;
-                }
+                    if (_ackWaiters.TryRemove(seq, out var pendingTcs))
+                    {
+                        pendingTcs.TrySetResult(false); // Timeout
+                    }
+                });
 
-                string? response = await ackTask;
-                cts.Dispose();
+                await connection.NetworkStream.WriteAsync(frame, 0, frame.Length);
+                await connection.NetworkStream.FlushAsync();
 
-                if (response == null)
-                {
-                    Debug.WriteLine($"[ShuttleHubClientService] Соединение с {connection.IpAddress} закрыто при ожидании подтверждения для: {command}");
-                    await InternalDisconnectAsync(connection.IpAddress);
-                    return false;
-                }
-
-                if (response.StartsWith($"ACK:{command.Split(':')[0]}"))
-                {
-                    Debug.WriteLine($"Debug ACK: {response}");
-                    Debug.WriteLine($"[ShuttleHubClientService] ACK получен для: {command} от {connection.IpAddress}");
-                    return true;
-                }
-                else if (response.StartsWith($"NACK:{command.Split(':')[0]}") || response.Contains("ACK:"))
-                {
-                    Debug.WriteLine($"Debug NACK: {response}");
-                    Debug.WriteLine($"[ShuttleHubClientService] NACK получен для: {command} от {connection.IpAddress} - {response}");
-                    return false;
-                }
-                else
-                {
-                    Debug.WriteLine($"[ShuttleHubClientService] Неожиданный ответ при ожидании подтверждения для: {command} от {connection.IpAddress} - {response}. Потенциально старая прошивка");
-                    return true;
-                }
+                return await tcs.Task;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ShuttleHubClientService] Ошибка отправки команды '{command}' к {connection.IpAddress}: {ex.Message}");
-                await InternalDisconnectAsync(connection.IpAddress);
+                Debug.WriteLine($"[ShuttleHubClientService] SendBinaryCommandAsync Error: {ex.Message}");
+                _ackWaiters.TryRemove(seq, out _);
                 return false;
             }
         }
 
+        public async Task<bool> SendConfigSetAsync(string ipAddress, ConfigParamID param, int value, int timeoutMs = 1000)
+        {
+            ShuttleConnection? connection;
+            lock (_lock)
+            {
+                if (!_connections.TryGetValue(ipAddress, out var conn)) return false;
+                connection = conn;
+            }
+
+            if (connection.NetworkStream == null) return false;
+
+            byte seq = connection.NextSeq++;
+
+            var cfgPacket = new ConfigPacket
+            {
+                ParamID = (byte)param,
+                Value = value
+            };
+
+            int payloadSize = Marshal.SizeOf(cfgPacket);
+            int frameSize = 6 + payloadSize + 2;
+            byte[] frame = new byte[frameSize];
+
+            // Header
+            frame[0] = 0xAA;
+            frame[1] = 0x55;
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
+            frame[4] = seq;
+            frame[5] = (byte)MsgID.MSG_CONFIG_SET;
+
+            // Payload
+            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cfgPacket);
+
+            // CRC
+            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
+
+            try
+            {
+                var tcs = new TaskCompletionSource<bool>();
+                _ackWaiters[seq] = tcs;
+
+                var cts = new CancellationTokenSource(timeoutMs);
+                cts.Token.Register(() =>
+                {
+                    if (_ackWaiters.TryRemove(seq, out var pendingTcs))
+                    {
+                        pendingTcs.TrySetResult(false);
+                    }
+                });
+
+                await connection.NetworkStream.WriteAsync(frame, 0, frame.Length);
+                await connection.NetworkStream.FlushAsync();
+
+                return await tcs.Task;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ShuttleHubClientService] SendConfigSetAsync Error: {ex.Message}");
+                _ackWaiters.TryRemove(seq, out _);
+                return false;
+            }
+        }
 
         public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
 
@@ -309,17 +514,10 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 if (_connections.TryGetValue(ipAddress, out var connection))
                 {
                     connectionToDispose = connection;
+
                     connection.ReceiveCts?.Cancel();
                     connection.ReceiveCts?.Dispose();
                     connection.ReceiveCts = null;
-
-                    connection.Writer?.Close();
-                    connection.Writer?.Dispose();
-                    connection.Writer = null;
-
-                    connection.Reader?.Close();
-                    connection.Reader?.Dispose();
-                    connection.Reader = null;
 
                     connection.NetworkStream?.Close();
                     connection.NetworkStream?.Dispose();
@@ -332,7 +530,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 }
             }
 
-
             if (connectionToDispose != null)
             {
                 if (connectionToDispose.ReceiveTask != null)
@@ -341,9 +538,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     {
                         await connectionToDispose.ReceiveTask;
                     }
-                    catch (OperationCanceledException)
-                    {
-                    }
+                    catch (OperationCanceledException) { }
                 }
                 OnDisconnected(ipAddress);
             }
@@ -358,8 +553,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     var conn = kvp.Value;
                     conn.ReceiveCts?.Cancel();
                     conn.ReceiveCts?.Dispose();
-                    conn.Writer?.Dispose();
-                    conn.Reader?.Dispose();
                     conn.NetworkStream?.Dispose();
                     conn.TcpClient?.Close();
                     conn.TcpClient?.Dispose();
@@ -370,8 +563,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
    
         private void OnConnected(string ip, int id) => Connected?.Invoke(ip, id);
         private void OnDisconnected(string ip) => Disconnected?.Invoke(ip);
-        private void OnLogReceived(string ip, string log) => LogReceived?.Invoke(ip, log);
+        private void OnLogReceived(string ip, ShuttleMessageBase msg) => LogReceived?.Invoke(ip, msg);
     }
-
-     
 }

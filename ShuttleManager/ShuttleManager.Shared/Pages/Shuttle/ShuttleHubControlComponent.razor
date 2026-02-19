@@ -1,4 +1,4 @@
-﻿@using System.Diagnostics
+@using System.Diagnostics
 @using ShuttleManager.Shared.Services
 @using ShuttleManager.Shared.Services.FilePicker
 @using ShuttleManager.Shared.Services.OtaUpdate
@@ -6,6 +6,7 @@
 @using ShuttleManager.Shared.Services.WebBrowser
 @using System.Text.Json.Nodes
 @using ShuttleManager.Shared.Models
+@using ShuttleManager.Shared.Models.Protocol
 @using Microsoft.Extensions.Logging
 @inject IJSRuntime JSRuntime
 @inject IShuttleHubClientService HubClientService
@@ -515,14 +516,15 @@
 
     private string SeeCorrentNumberShuttle(string numberShuttle)
     {
-        if (char.IsDigit(numberShuttle[0]))
+        if (!string.IsNullOrEmpty(numberShuttle) && char.IsDigit(numberShuttle[0]))
         {
             return numberShuttle;
         }
-        else
+        else if (!string.IsNullOrEmpty(numberShuttle))
         {
             return numberShuttle.Substring(1);
         }
+        return numberShuttle;
     }
 
     private bool IsEventForThisShuttle(string ipAddress)
@@ -557,285 +559,117 @@
         });
     }
 
-    private async Task OnTelemetryReceived(string ip, JsonNode telemetry)
+    private async void OnLogReceived(string ip, ShuttleMessageBase msg)
     {
         if (!IsEventForThisShuttle(ip)) return;
 
+        var formattedString = msg.ToFormattedTerminalString();
+        File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {formattedString}\n");
+
         await InvokeAsync(() =>
         {
-            try
-            {
-                ProcessTelemetryData(telemetry);
-                Shuttle.LastActivity = DateTime.Now;
-                StateHasChanged();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Ошибка обработки телеметрии от {IpAddress}", ip);
-            }
-        });
-    }
+            // Process types
+            if (msg is TelemetryMessage tm) UpdateTelemetry(tm.Data);
+            else if (msg is SensorMessage sm) UpdateSensors(sm.Data);
+            else if (msg is StatsMessage stm) UpdateStats(stm.Data);
+            else if (msg is ConfigMessage cm) UpdateConfig(cm.Data);
 
-    private void ProcessTelemetryData(JsonNode telemetry)
-    {
-        var id = telemetry["id"]?.GetValue<string>() ?? "";
-        var batt = telemetry["batt"]?.GetValue<int>() ?? 0;
-        var volt = telemetry["volt"]?.GetValue<double>() ?? 0.0;
-        var stateStr = telemetry["state_s"]?.ToString() ?? "Неизвестно";
-        var err = telemetry["err"]?.GetValue<int>() ?? 0;
-        var warn = telemetry["warn"]?.GetValue<int>() ?? 0;
-
-        Shuttle.BatteryPercentage = batt;
-        Shuttle.BatteryVoltage = volt;
-        Shuttle.CurrentStatus = stateStr;
-        Shuttle.ErrorCode = err;
-        Shuttle.WarningCode = warn;
-    }
-
-    private void ParseAndHandleResponse(string response)
-    {
-        var line = response.Trim();
-
-        var cbMatch = System.Text.RegularExpressions.Regex.Match(line, @"^CB\s+(\d+)$");
-        if (cbMatch.Success && int.TryParse(cbMatch.Groups[1].Value, out int batteryPercentageScr))
-        {
-            Shuttle.BatteryPercentage = batteryPercentageScr;
-            Logger.LogInformation($"Parsed CB: Battery {batteryPercentageScr}%");
-            return;
-        }
-
-        var battMatch = System.Text.RegularExpressions.Regex.Match(line, @"Batt voltage = ([\d.]+)V Charge = (\d+)% limit = (\d+)%");
-        if (battMatch.Success)
-        {
-            if (double.TryParse(battMatch.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double batteryVoltage) &&
-                int.TryParse(battMatch.Groups[2].Value, out int batteryPercentage) &&
-                int.TryParse(battMatch.Groups[3].Value, out int batteryLimit))
-            {
-                Shuttle.BatteryVoltage = batteryVoltage;
-                Shuttle.BatteryPercentage = batteryPercentage;
-                Shuttle.BatteryLimit = batteryLimit;
-                Logger.LogInformation($"Parsed Batt: {batteryVoltage}V {batteryPercentage}% {batteryLimit}%");
-            }
-            return;
-        }
-
-        var inverseMatch = System.Text.RegularExpressions.Regex.Match(line, @"Inverse = (YES|NO)");
-        if (inverseMatch.Success)
-        {
-            Shuttle.Inverse = inverseMatch.Groups[1].Value == "YES";
-            Logger.LogInformation($"Parsed Inverse: {Shuttle.Inverse}");
-            return;
-        }
-
-        var statusMatch = System.Text.RegularExpressions.Regex.Match(line, @"Status = (.+?)\s+\((\d+)\)");
-        if (statusMatch.Success)
-        {
-            Shuttle.CurrentStatus = statusMatch.Groups[1].Value.Trim();
-            if (int.TryParse(statusMatch.Groups[2].Value, out int statusCode))
-            {
-                Shuttle.StatusCode = statusCode;
-            }
-            Logger.LogInformation($"Parsed Status: {Shuttle.CurrentStatus} ({Shuttle.StatusCode})");
-            return;
-        }
-
-        var mprMatch = System.Text.RegularExpressions.Regex.Match(line, @"MPR = (\d+)\s+max speed = (\d+)");
-        if (mprMatch.Success)
-        {
-            if (int.TryParse(mprMatch.Groups[1].Value, out int interPalletDistance) &&
-                int.TryParse(mprMatch.Groups[2].Value, out int maxSpeed))
-            {
-                Shuttle.InterPalleteDistance = interPalletDistance;
-                Shuttle.MaxSpeed = maxSpeed;
-                Logger.LogInformation($"Parsed MPR/MaxSp: MPR={interPalletDistance}, MaxSp={maxSpeed}");
-            }
-            return;
-        }
-
-        var shuttleMatch = System.Text.RegularExpressions.Regex.Match(line, @"Shuttle number = (\d+)\s+Shuttle length = (\d+)");
-        if (shuttleMatch.Success)
-        {
-            if (int.TryParse(shuttleMatch.Groups[1].Value, out int shuttleNumber) &&
-                int.TryParse(shuttleMatch.Groups[2].Value, out int shuttleLength))
-            {
-                Shuttle.ShuttleLength = shuttleLength;
-                Logger.LogInformation($"Parsed Shuttle: Num={Shuttle.ShuttleNumber}, Len={shuttleLength}");
-            }
-            return;
-        }
-
-        var tempMatch = System.Text.RegularExpressions.Regex.Match(line, @"Temperature = ([\d.]+)");
-        if (tempMatch.Success)
-        {
-            if (double.TryParse(tempMatch.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double temperature))
-            {
-                Shuttle.Temperature = temperature;
-                Logger.LogInformation($"Parsed Temp: {temperature}°C");
-            }
-            return;
-        }
-
-        var angleMatch = System.Text.RegularExpressions.Regex.Match(line, @"Angle = (\d+)\s*\|\s*Lenght = (\d+)\s*\|\s*position = (\d+)");
-        if (angleMatch.Success)
-        {
-            if (int.TryParse(angleMatch.Groups[1].Value, out int angle) &&
-                int.TryParse(angleMatch.Groups[2].Value, out int length) &&
-                int.TryParse(angleMatch.Groups[3].Value, out int position))
-            {
-                Shuttle.Angle = angle;
-                Shuttle.Length = length;
-                Shuttle.Position = position;
-                Logger.LogInformation($"Parsed Angle/Length/Pos: {angle}/{length}/{position}");
-            }
-            return;
-        }
-
-        var fifoLifoMatch = System.Text.RegularExpressions.Regex.Match(line, @"FIFO_LIFO = (FIFO|LIFO)");
-        if (fifoLifoMatch.Success)
-        {
-            Shuttle.FifoLifoMode = fifoLifoMatch.Groups[1].Value;
-            Logger.LogInformation($"Parsed FIFO/LIFO: {Shuttle.FifoLifoMode}");
-            return;
-        }
-
-        var distMatch = System.Text.RegularExpressions.Regex.Match(line, @"Forwrd dist = (\d+)\s*\|\s*Revrs dist = (\d+)");
-        if (distMatch.Success)
-        {
-            if (int.TryParse(distMatch.Groups[1].Value, out int forwardDist) &&
-                int.TryParse(distMatch.Groups[2].Value, out int reverseDist))
-            {
-                Shuttle.ForwardDistance = forwardDist;
-                Shuttle.ReverseDistance = reverseDist;
-                Logger.LogInformation($"Parsed Dist F/R: {forwardDist}/{reverseDist}");
-            }
-            return;
-        }
-
-        var pltDistMatch = System.Text.RegularExpressions.Regex.Match(line, @"Forwrd plt dist = (\d+)\s*\|\s*Revrs plt dist = (\d+)");
-        if (pltDistMatch.Success)
-        {
-            if (int.TryParse(pltDistMatch.Groups[1].Value, out int forwardPalletDist) &&
-                int.TryParse(pltDistMatch.Groups[2].Value, out int reversePalletDist))
-            {
-                Shuttle.ForwardPalletDistance = forwardPalletDist;
-                Shuttle.ReversePalletDistance = reversePalletDist;
-                Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDist}/{reversePalletDist}");
-            }
-            return;
-        }
-
-        var pltDetMatch = System.Text.RegularExpressions.Regex.Match(line, @"Plt dtchk (F1|R1) = (\d+)\s*\|\s*Plt dtchk (F2|R2) = (\d+)");
-        if (pltDetMatch.Success)
-        {
-            string side = pltDetMatch.Groups[1].Value.Substring(0, 1);
-            if (int.TryParse(pltDetMatch.Groups[2].Value, out int detector1) &&
-                int.TryParse(pltDetMatch.Groups[4].Value, out int detector2))
-            {
-                if (side == "F")
-                {
-                    Shuttle.PalletDetectorFront1 = detector1;
-                    Shuttle.PalletDetectorFront2 = detector2;
-                }
-                else if (side == "R")
-                {
-                    Shuttle.PalletDetectorRear1 = detector1;
-                    Shuttle.PalletDetectorRear2 = detector2;
-                }
-                Logger.LogInformation($"Parsed Pallet Det {side}: {detector1}/{detector2}");
-            }
-            return;
-        }
-
-        var inChanMatch = System.Text.RegularExpressions.Regex.Match(line, @"In channel:\s+(YES|NO)");
-        if (inChanMatch.Success)
-        {
-            Shuttle.IsInChannel = inChanMatch.Groups[1].Value == "YES";
-            Logger.LogInformation($"Parsed In Channel: {Shuttle.IsInChannel}");
-            return;
-        }
-
-        var lifterMatch = System.Text.RegularExpressions.Regex.Match(line, @"Lifter UP:\s+(YES|NO)\s*\|\s*Lifter DOWN:\s+(YES|NO)");
-        if (lifterMatch.Success)
-        {
-            Shuttle.IsLifterUp = lifterMatch.Groups[1].Value == "YES";
-            Shuttle.IsLifterDown = lifterMatch.Groups[2].Value == "YES";
-            Logger.LogInformation($"Parsed Lifter: UP={Shuttle.IsLifterUp}, DOWN={Shuttle.IsLifterDown}");
-            return;
-        }
-
-        var bumperMatch = System.Text.RegularExpressions.Regex.Match(line, @"Bumper forward = (\d+)\s*\|\s*Bumper reverse = (\d+)");
-        if (bumperMatch.Success)
-        {
-            if (int.TryParse(bumperMatch.Groups[1].Value, out int bumperForward) &&
-                int.TryParse(bumperMatch.Groups[2].Value, out int bumperReverse))
-            {
-                Shuttle.BumperForward = bumperForward;
-                Shuttle.BumperReverse = bumperReverse;
-                Logger.LogInformation($"Parsed Bumper F/R: {bumperForward}/{bumperReverse}");
-            }
-            return;
-        }
-
-        var zeroOffMatch = System.Text.RegularExpressions.Regex.Match(line, @"Zero point MPR = (\d+)\s+channel offset = (\d+)");
-        if (zeroOffMatch.Success)
-        {
-            if (int.TryParse(zeroOffMatch.Groups[1].Value, out int zeroPointMpr) &&
-                int.TryParse(zeroOffMatch.Groups[2].Value, out int channelOffset))
-            {
-                Shuttle.ZeroPointMpr = zeroPointMpr;
-                Shuttle.ChannelOffset = channelOffset;
-                Logger.LogInformation($"Parsed Zero/Offset: {zeroPointMpr}/{channelOffset}");
-            }
-            return;
-        }
-
-        var waitTimeMatch = System.Text.RegularExpressions.Regex.Match(line, @"Wait time on unload = (\d+)\s+Sec");
-        if (waitTimeMatch.Success)
-        {
-            if (int.TryParse(waitTimeMatch.Groups[1].Value, out int waitTime))
-            {
-                Shuttle.WaitTimeUnload = waitTime;
-                Logger.LogInformation($"Parsed Wait Time: {waitTime}s");
-            }
-            return;
-        }
-    }
-
-    private async void OnLogReceived(string ip, string log)
-    {
-        if (!IsEventForThisShuttle(ip)) return;
-
-        File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        await InvokeAsync(() =>
-        {
-            ParseAndHandleResponse(log);
-            if (log.StartsWith("-----------------------------------------------"))
-            {
-                if (!_inStatusBlock)
-                {
-                    _inStatusBlock = true;
-                    _statusBlockLines.Clear();
-                }
-                else
-                {
-                    _inStatusBlock = false;
-                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                }
-            }
-            else if (_inStatusBlock) _statusBlockLines.Add(log);
-            if (log.Contains("##HEARTBEAT##")) LogToTerminal($"[HEARTBEAT] {log}\n");
-            else
-            {
-                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                LogToTerminal($"[{DateTime.Now}] {cleanLog}\n");
-            }
+            LogToTerminal($"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
             StateHasChanged();
         });
     }
 
-    private async Task SendCommandAsync(string command, string description = "")
+    private void UpdateTelemetry(TelemetryPacket data)
     {
-        if (!Shuttle.IsConnected)
+        Shuttle.LastActivity = DateTime.Now;
+        Shuttle.ErrorCode = data.ErrorCode;
+        Shuttle.CurrentStatus = $"Status: {data.ShuttleStatus}";
+        Shuttle.Position = data.CurrentPosition;
+        Shuttle.CurrentSpeed = data.Speed;
+        Shuttle.BatteryPercentage = data.BatteryCharge;
+        Shuttle.BatteryVoltage = data.BatteryVoltage;
+        Shuttle.StateFlags = data.StateFlags;
+
+        // Map State Flags
+        Shuttle.IsLifterUp = (data.StateFlags & 1) != 0;
+        // Bit 1: motorStart, Bit 2: motorReverse, Bit 3: inverse, Bit 4: inChannel, Bit 5: fifoLifo
+        Shuttle.IsInChannel = (data.StateFlags & 16) != 0;
+        Shuttle.Inverse = (data.StateFlags & 8) != 0;
+    }
+
+    private void UpdateSensors(SensorPacket data)
+    {
+        Shuttle.LastActivity = DateTime.Now;
+        Shuttle.ForwardDistance = data.DistanceF;
+        Shuttle.ReverseDistance = data.DistanceR;
+        Shuttle.ForwardPalletDistance = data.DistancePltF;
+        Shuttle.ReversePalletDistance = data.DistancePltR;
+        Shuttle.Angle = data.Angle;
+        Shuttle.Temperature = data.Temperature;
+        Shuttle.HardwareFlags = data.HardwareFlags;
+
+        // Map Hardware Flags
+        // Bit 0: detectPalleteF1, Bit 1: F2, Bit 2: R1, Bit 3: R2
+        Shuttle.PalletDetectorFront1 = (data.HardwareFlags & 1) != 0 ? 1 : 0;
+        Shuttle.PalletDetectorFront2 = (data.HardwareFlags & 2) != 0 ? 1 : 0;
+        Shuttle.PalletDetectorRear1 = (data.HardwareFlags & 4) != 0 ? 1 : 0;
+        Shuttle.PalletDetectorRear2 = (data.HardwareFlags & 8) != 0 ? 1 : 0;
+
+        // Bit 4: BUMPER_F, Bit 5: BUMPER_R
+        Shuttle.BumperForward = (data.HardwareFlags & 16) != 0 ? 1 : 0;
+        Shuttle.BumperReverse = (data.HardwareFlags & 32) != 0 ? 1 : 0;
+
+        // Bit 6: DL_UP, Bit 7: DL_DOWN
+        Shuttle.IsLifterUp = (data.HardwareFlags & 64) != 0;
+        Shuttle.IsLifterDown = (data.HardwareFlags & 128) != 0;
+    }
+
+    private void UpdateStats(StatsPacket data)
+    {
+        Shuttle.LastActivity = DateTime.Now;
+        Shuttle.TotalDist = data.TotalDist;
+        Shuttle.LoadCounter = data.LoadCounter;
+        Shuttle.UnloadCounter = data.UnloadCounter;
+        Shuttle.CompactCounter = data.CompactCounter;
+        Shuttle.LiftUpCounter = data.LiftUpCounter;
+        Shuttle.LiftDownCounter = data.LiftDownCounter;
+        Shuttle.PalleteCount = data.PalleteCount;
+    }
+
+    private void UpdateConfig(ConfigPacket data)
+    {
+        switch ((ConfigParamID)data.ParamID)
+        {
+             case ConfigParamID.CFG_MAX_SPEED:
+                 Shuttle.MaxSpeed = data.Value;
+                 break;
+             case ConfigParamID.CFG_INTER_PALLET:
+                 Shuttle.InterPalleteDistance = data.Value;
+                 break;
+             case ConfigParamID.CFG_SHUTTLE_LEN:
+                 Shuttle.ShuttleLength = data.Value;
+                 break;
+             case ConfigParamID.CFG_MIN_BATT:
+                 Shuttle.BatteryLimit = data.Value;
+                 break;
+             case ConfigParamID.CFG_WAIT_TIME:
+                 Shuttle.WaitTimeUnload = data.Value;
+                 break;
+             case ConfigParamID.CFG_CHNL_OFFSET:
+                 Shuttle.ChannelOffset = data.Value;
+                 break;
+             case ConfigParamID.CFG_MPR_OFFSET:
+                 Shuttle.ZeroPointMpr = data.Value;
+                 break;
+             case ConfigParamID.CFG_FIFO_LIFO:
+                 Shuttle.FifoLifoMode = data.Value == 1 ? "LIFO" : "FIFO"; // Assuming mapping? Or just string?
+                 break;
+        }
+    }
+
+    private async Task SendBinaryCmd(CmdType cmd, int arg1 = 0, int arg2 = 0, string description = "")
+    {
+        if (!Shuttle.IsConnected || Shuttle.IPAddress is null)
         {
             LogToTerminal("[ERROR] Нет подключения\n");
             return;
@@ -845,27 +679,15 @@
         try
         {
             StateHasChanged();
+            LogToTerminal($"[CMD] Отправка: {cmd} ({description})\n");
 
-            var displayCommand = string.IsNullOrEmpty(description) ? command : $"{command} ({description})";
-            LogToTerminal($"[CMD] Отправка: {displayCommand}\n");
-
-            if (Shuttle.IPAddress is null)
-            {
-                throw new Exception("error with null IP");
-            }
-            else
-            {
-                var success = await HubClientService.SendCommandToShuttleAsync(Shuttle.IPAddress, command, 1000);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            LogToTerminal($"[WARNING] Команда отменена: {command}\n");
+            var success = await HubClientService.SendBinaryCommandAsync(Shuttle.IPAddress, cmd, arg1, arg2);
+            if (!success) LogToTerminal($"[WARNING] Команда {cmd} не подтверждена\n");
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Ошибка отправки команды {Command} к {IpAddress}", command, Shuttle.IPAddress);
-            LogToTerminal($"[ERROR] Исключение при отправке: {ex.Message}\n");
+            Logger.LogError(ex, "Ошибка отправки команды {Command} к {IpAddress}", cmd, Shuttle.IPAddress);
+            LogToTerminal($"[ERROR] Исключение: {ex.Message}\n");
         }
         finally
         {
@@ -874,51 +696,53 @@
         }
     }
 
-    private async Task OpenLogsShuttle()
+    private async Task SendConfigSet(ConfigParamID param, int value, string description = "")
     {
-        if (isAndroid)
+        if (!Shuttle.IsConnected || Shuttle.IPAddress is null) return;
+
+        _isCommandInProgress = true;
+        try
         {
-            return;
+            StateHasChanged();
+            LogToTerminal($"[CFG] Установка {param}={value} ({description})\n");
+            await HubClientService.SendConfigSetAsync(Shuttle.IPAddress, param, value);
         }
-        string way = Path.Combine(AppContext.BaseDirectory, "logs");
-        Process.Start("explorer.exe", way);
+        catch (Exception ex)
+        {
+             LogToTerminal($"[ERROR] {ex.Message}\n");
+        }
+        finally
+        {
+            _isCommandInProgress = false;
+            StateHasChanged();
+        }
     }
 
-    private async Task OnAraseModeChanged()
+    // Command Handlers
+    private async Task SendStopCommand() => await SendBinaryCmd(CmdType.CMD_STOP, 0, 0, "Остановка");
+    private async Task SendLoadCommand() => await SendBinaryCmd(CmdType.CMD_LOAD, 0, 0, "Загрузка");
+    private async Task SendLargeLoadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_LOAD, 0, 0, "Длительная загрузка");
+    private async Task SendUnloadCommand() => await SendBinaryCmd(CmdType.CMD_UNLOAD, 0, 0, "Выгрузка");
+    private async Task SendLargeUnloadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_UNLOAD, 0, 0, "Длительная выгрузка");
+
+    private async Task SendManualShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MANUAL_MODE, 0, 0, "Ручной режим");
+    private async Task SendDemoCommand() => await SendBinaryCmd(CmdType.CMD_DEMO, 0, 0, "Демо-режим");
+    private async Task SendResetCommand() => await SendBinaryCmd(CmdType.CMD_RESET_ERROR, 0, 0, "Сброс ошибок");
+
+    private async Task SendSaveSettingCommand() => await SendBinaryCmd(CmdType.CMD_SAVE_EEPROM, 0, 0, "Сохранение настроек");
+    private async Task SendCalibrateCommand() => await SendBinaryCmd(CmdType.CMD_CALIBRATE, 0, 0, "Калибровка шаттла");
+    private async Task SendGoHomeCommand() => await SendBinaryCmd(CmdType.CMD_HOME, 0, 0, "Возвращение домой");
+
+    private async Task SetTime()
     {
-        IsFullErased = !IsFullErased;
+        // Arg1 = Unix Timestamp
+        int timestamp = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await SendBinaryCmd(CmdType.CMD_SET_DATETIME, timestamp, 0, "Установка времени");
     }
 
-    private async Task OpenOtaDisplayUpdate()
-    {
-        await SendCommandAsync("UPD", "Обновление");
-        await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}/update");
-    }
-
-    private async Task OpenOtaStmUpdate()
-    {
-        await SendCommandAsync("FRM", "Прошивка");
-        await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}");
-    }
-
-    private async Task SendStopCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dStop_", "Остановка");
-    private async Task SendLoadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLoad_", "Загрузка");
-    private async Task SendLargeLoadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLLoad", "Длительная загрузка");
-    private async Task SendUnloadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dUnld_", "Выгрузка");
-    private async Task SendLargeUnloadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLUnld", "Длительная выгрузка");
-
-    private async Task SendManualShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dManua", "Ручной режим");
-    private async Task SendDemoCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dDemo_", "Демо-режим");
-    private async Task SendResetCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dReset", "Сброс ошибок");
-
-    private async Task SendSaveSettingCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dSaveC", "Сохранение настроек");
-    private async Task SendCalibrateCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dClbr_", "Калибровка шаттла");
-    private async Task SendGoHomeCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dHome_", "Возвращение домой");
-
-    private async Task SendSetTimeShuttleCommand() => await SendCommandAsync("DT", "Установка времени и даты");
-    private async Task SendUseReverseModeShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dRevOn", "Реверс режим");
-    private async Task SendSealingForwardShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dComFo", "Уплотнение вперед");
-    private async Task SendSealingBackShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dComBa", "Уплотнение назад");
+    private async Task SendUseReverseModeShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 1, "Реверс режим");
+    private async Task SendSealingForwardShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_F, 0, 0, "Уплотнение вперед");
+    private async Task SendSealingBackShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_R, 0, 0, "Уплотнение назад");
 
     private bool isReversed = false;
     private async Task SendReverseShuttleCommand()
@@ -926,51 +750,50 @@
         if (!isReversed)
         {
             isReversed = true;
-            await SendCommandAsync($"{Shuttle.ShuttleNumber}dRevOn", "Реверс режим on");
+            await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 1, "Реверс режим on");
         }
         else
-        { await SendCommandAsync($"{Shuttle.ShuttleNumber}dReOff", "Реверс режим off"); isReversed = false; }
+        {
+            await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 0, "Реверс режим off");
+            isReversed = false;
+        }
 
     }
 
-    private async Task SendUpShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dUp___", "Подъём");
-    private async Task SendLeftShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLeft_", "движение назад");
-    private async Task SendRightShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dRight", "движение вперёд");
-    private async Task SendDownShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dDown_", "Спуск");
+    private async Task SendUpShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_UP, 0, 0, "Подъём");
+    private async Task SendLeftShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_LEFT_MAN, 0, 0, "движение назад");
+    private async Task SendRightShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_RIGHT_MAN, 0, 0, "движение вперёд");
+    private async Task SendDownShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_DOWN, 0, 0, "Спуск");
 
     private async Task SendFRMFirmwareCommand() => await SendUpdateCommandAndOpenBrowser();
     private async Task SendUpdateStateShuttleCommand() => await SendUPDCommandAndOpenBrowser();
-    private async Task SendRebootShuttleCommand() => await SendCommandAsync("RBT", "Reboot shuttle");
+    private async Task SendRebootShuttleCommand() => await SendBinaryCmd(CmdType.CMD_SYSTEM_RESET, 0, 0, "Reboot shuttle");
 
     private async Task SendSetShuttleNumCommand()
     {
-        await SendCommandAsync($"{Shuttle.ShuttleNumber}dNN{ShuttleNumberInput}", $"Установка номера шаттла: {ShuttleNumberInput}");
+        await SendConfigSet(ConfigParamID.CFG_SHUTTLE_NUM, ShuttleNumberInput, $"Установка номера шаттла: {ShuttleNumberInput}");
     }
-    private async Task SendSetMoveReverseShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dMf{MoveDistanceBackwardInput}", $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм");
-    private async Task SendMoveForwardShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dMr{MoveDistanceForwardInput}", $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм");
-    private async Task SendSetMaxSpeedShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dSp{MaxSpeedInput}", $"Установка максимальной скорости: {MaxSpeedInput}%");
-    private async Task SendSetMinPowerShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dBc{MinPowerInput}", $"Установка уровня защиты батареи: {MinPowerInput}%");
-    private async Task SendSetPalletBetweenDistanceShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dDm{PallentDistance}", $"Установка межпаллетного расстояния: {PallentDistance}%");
+    private async Task SendSetMoveReverseShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_DIST_R, MoveDistanceBackwardInput, 0, $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм");
+    private async Task SendMoveForwardShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_DIST_F, MoveDistanceForwardInput, 0, $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм");
+    private async Task SendSetMaxSpeedShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_MAX_SPEED, MaxSpeedInput, $"Установка максимальной скорости: {MaxSpeedInput}%");
+    private async Task SendSetMinPowerShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_MIN_BATT, MinPowerInput, $"Установка уровня защиты батареи: {MinPowerInput}%");
+    private async Task SendSetPalletBetweenDistanceShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_INTER_PALLET, PallentDistance, $"Установка межпаллетного расстояния: {PallentDistance}%");
 
-    private async Task SendSetDistanceOfEdgeShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dMс{DistanceOfEdge}", $"Установка расстояния от края: {DistanceOfEdge} мм");
-    private async Task SendSetlenghtOfShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dSl{LenghtOfShuttle}", $"Установка длины шаттла: {LenghtOfShuttle} мм");
+    private async Task SendSetDistanceOfEdgeShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_CHNL_OFFSET, DistanceOfEdge, $"Установка расстояния от края: {DistanceOfEdge} мм");
+    private async Task SendSetlenghtOfShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_SHUTTLE_LEN, LenghtOfShuttle, $"Установка длины шаттла: {LenghtOfShuttle} мм");
 
-    private async Task SetTime()
-    {
-        DateTime currentTime = DateTime.Now;
-        string command = $"DT {currentTime:HH:mm:ss dd/MM/yyyy}";
-        await SendCommandAsync(command);
-    }
 
     private async Task SendUpdateCommandAndOpenBrowser()
     {
-        await SendCommandAsync("FRM", "Прошивка");
+        await SendBinaryCmd(CmdType.CMD_FIRMWARE_UPDATE, 0, 0, "Прошивка");
         await OpenWebInterfaceAsync("FRM");
     }
 
     private async Task SendUPDCommandAndOpenBrowser()
     {
-        await SendCommandAsync("UPD", "Обновление");
+        // Assuming UPD also uses Firmware command or just opens browser?
+        // Legacy sent "UPD".
+        await SendBinaryCmd(CmdType.CMD_FIRMWARE_UPDATE, 0, 0, "Обновление");
         await OpenWebInterfaceAsync("UPD");
     }
 
@@ -998,7 +821,17 @@
     {
         if (!string.IsNullOrWhiteSpace(_manualCommand))
         {
-            await SendCommandAsync(_manualCommand.Trim(), "Ручная команда");
+             // Try to parse command? Or just send raw?
+             // Since we don't have text command support, we can't do much.
+             // Maybe user enters "5" for stop?
+             if (Enum.TryParse(_manualCommand, true, out CmdType result))
+             {
+                  await SendBinaryCmd(result, 0, 0, "Ручная команда");
+             }
+             else
+             {
+                 LogToTerminal($"[ERROR] Неизвестная команда '{_manualCommand}'. Введите имя команды (например, CMD_STOP)\n");
+             }
             _manualCommand = "";
         }
     }
