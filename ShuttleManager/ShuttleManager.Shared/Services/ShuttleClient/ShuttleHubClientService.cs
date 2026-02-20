@@ -13,7 +13,9 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     {
         public event Action<string, ShuttleMessageBase>? LogReceived;
+
         public event Action<string, int>? Connected;
+
         public event Action<string>? Disconnected;
 
         private readonly Dictionary<string, ShuttleConnection> _connections = [];
@@ -121,7 +123,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 connection.NetworkStream = connection.TcpClient.GetStream();
 
                 OnConnected(ipAddress, connection.ShuttleId);
-             
+
                 connection.ReceiveCts = new CancellationTokenSource();
                 connection.ReceiveTask = Task.Run(async () => await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
 
@@ -220,7 +222,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     }
 
                     // Validate CRC
-                    ushort receivedCrc = BinaryPrimitives.ReadUInt16LittleEndian(new ReadOnlySpan<byte>(data, syncIndex + 6 + payloadLength, 2));
+                    ushort receivedCrc = BinaryPrimitives.ReadUInt16BigEndian(new ReadOnlySpan<byte>(data, syncIndex + 6 + payloadLength, 2));
                     ushort calculatedCrc = Crc16Ccitt(new ReadOnlySpan<byte>(data, syncIndex, 6 + payloadLength));
 
                     if (receivedCrc == calculatedCrc)
@@ -243,23 +245,23 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                         processedAny = true;
                     }
                 }
-                else if (newlineIndex != -1)
-                {
-                    // Found newline before any sync -> Text line
-                    int length = newlineIndex - offset;
-                    if (length > 0)
-                    {
-                        string line = Encoding.UTF8.GetString(data, offset, length).Trim();
-                        if (line.Length > 0 && line[^1] == '\r') line = line[..^1];
+                //else if (newlineIndex != -1)
+                //{
+                //    // Found newline before any sync -> Text line
+                //    int length = newlineIndex - offset;
+                //    if (length > 0)
+                //    {
+                //        string line = Encoding.UTF8.GetString(data, offset, length).Trim();
+                //        if (line.Length > 0 && line[^1] == '\r') line = line[..^1];
 
-                        if (!string.IsNullOrWhiteSpace(line))
-                        {
-                            OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = line });
-                        }
-                    }
-                    offset = newlineIndex + 1; // Skip \n
-                    processedAny = true;
-                }
+                //        if (!string.IsNullOrWhiteSpace(line))
+                //        {
+                //            OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = line });
+                //        }
+                //    }
+                //    offset = newlineIndex + 1; // Skip \n
+                //    processedAny = true;
+                //}
                 else
                 {
                     // No Sync, No Newline found in remaining data
@@ -289,14 +291,17 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     if (payload.Length >= Marshal.SizeOf<TelemetryPacket>())
                         message = new TelemetryMessage { Data = MemoryMarshal.Read<TelemetryPacket>(payload) };
                     break;
+
                 case MsgID.MSG_SENSORS:
                     if (payload.Length >= Marshal.SizeOf<SensorPacket>())
                         message = new SensorMessage { Data = MemoryMarshal.Read<SensorPacket>(payload) };
                     break;
+
                 case MsgID.MSG_STATS:
                     if (payload.Length >= Marshal.SizeOf<StatsPacket>())
                         message = new StatsMessage { Data = MemoryMarshal.Read<StatsPacket>(payload) };
                     break;
+
                 case MsgID.MSG_LOG:
                     if (payload.Length >= 1)
                     {
@@ -305,12 +310,14 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                         message = new RawLogMessage { Level = level, Text = text };
                     }
                     break;
+
                 case MsgID.MSG_CONFIG_SET:
                 case MsgID.MSG_CONFIG_GET:
                 case MsgID.MSG_CONFIG_REP:
                     if (payload.Length >= Marshal.SizeOf<ConfigPacket>())
                         message = new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) };
                     break;
+
                 case MsgID.MSG_ACK:
                     if (payload.Length >= Marshal.SizeOf<AckPacket>())
                     {
@@ -409,7 +416,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             // CRC
             ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
+            BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(6 + payloadSize, 2), crc);
 
             try
             {
@@ -560,9 +567,11 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 _connections.Clear();
             }
         }
-   
+
         private void OnConnected(string ip, int id) => Connected?.Invoke(ip, id);
+
         private void OnDisconnected(string ip) => Disconnected?.Invoke(ip);
+
         private void OnLogReceived(string ip, ShuttleMessageBase msg) => LogReceived?.Invoke(ip, msg);
     }
 }

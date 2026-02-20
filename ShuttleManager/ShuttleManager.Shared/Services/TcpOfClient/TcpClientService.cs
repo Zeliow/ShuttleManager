@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Net.Sockets;
+
 namespace ShuttleManager.Shared.Services.TcpOfClient;
 
 public class TcpClientService : ITcpClientService

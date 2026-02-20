@@ -44,7 +44,7 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[LOG] [{Level}] {Text}";
+            return $"[{Level}] {Text}";
         }
     }
 

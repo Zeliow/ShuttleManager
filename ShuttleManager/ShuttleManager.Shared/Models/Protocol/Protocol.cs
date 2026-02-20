@@ -94,6 +94,8 @@ namespace ShuttleManager.Shared.Models.Protocol
         public byte BatteryCharge;    // %
         public float BatteryVoltage;   // Volts
         public ushort StateFlags;
+
+        public uint ShuttleNumber;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]

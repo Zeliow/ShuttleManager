@@ -58,6 +58,7 @@ public class Shuttle
 
     // New stats properties
     public uint TotalDist { get; set; }
+
     public uint LoadCounter { get; set; }
     public uint UnloadCounter { get; set; }
     public uint CompactCounter { get; set; }
@@ -67,6 +68,7 @@ public class Shuttle
 
     // Raw flags
     public ushort StateFlags { get; set; }
+
     public byte HardwareFlags { get; set; }
 
     public string FullStatusBlock { get; set; } = "";

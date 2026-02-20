@@ -105,7 +105,7 @@
                         <li class="nav-item">
                             <a class="nav-link @(index == ActiveTabIndex ? "active" : "")"
                                href="#" @onclick="() => SelectShuttle(index)">
-                                Шаттл №@SeeCorrentNumberShuttle(shuttle.ShuttleNumber)
+                                Шаттл №@shuttle.ShuttleNumber
                                 @if (shuttle.IsConnected)
                                 {
                                     <span class="badge bg-success">●</span>
@@ -145,7 +145,7 @@
     private string BaseIp = "192.168.40";
     private int Port = 23;
     private int StartRange = 130;
-    private int EndRange = 196;
+    private int EndRange = 250;
     private bool IsScanning = false;
     private bool ScanCompleted = false;
     private List<IPAddress> FoundDevices = new();
