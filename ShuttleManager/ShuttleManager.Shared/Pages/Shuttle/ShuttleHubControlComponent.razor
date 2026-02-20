@@ -3,7 +3,6 @@
 @using ShuttleManager.Shared.Services.FilePicker
 @using ShuttleManager.Shared.Services.OtaUpdate
 @using ShuttleManager.Shared.Services.ShuttleClient
-@using ShuttleManager.Shared.Services.WebBrowser
 @using System.Text.Json.Nodes
 @using ShuttleManager.Shared.Models
 @using ShuttleManager.Shared.Models.Protocol
@@ -11,7 +10,6 @@
 @inject IJSRuntime JSRuntime
 @inject IShuttleHubClientService HubClientService
 @inject ILogger<ShuttleHubControlComponent> Logger
-@inject IWebBrowserService WebBrowserService
 @inject IFilePickerService FilePickerService
 @inject IOtaUpdateService OtaService
 @implements IDisposable
@@ -46,63 +44,86 @@
         }
         else
         {
-            <div class="mb-3">
+            <div class="mb-3" style="margin-bottom: 0px;">
                 <div class="row">
                     <div class="col-md-3">
                         <label class="form-label small text-muted">Батарея:</label>
-                        <p id="batteryData_@ComponentId" class="fw-bold @GetBatteryColorClass()">
+                        <p id="batteryData_@ComponentId" style="margin-bottom: 0px;" class="fw-bold @GetBatteryColorClass()">
                             @BatteryData
                         </p>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small text-muted">Статус:</label>
-                        <p id="currentStatus_@ComponentId" class="fw-bold @GetStatusColorClass()">
+                        <p id="currentStatus_@ComponentId" style="margin-bottom: 0px;" class="fw-bold @GetStatusColorClass()">
                             @CurrentStatus
                         </p>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small text-muted">Активность:</label>
-                        <p class="small text-muted">@LastActivityTime</p>
+                        <p class="small text-muted" style="margin-bottom: 0px;">@LastActivityTime</p>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small text-muted">Время работы:</label>
-                        <p class="small text-muted">@Uptime</p>
+                        <p class="small text-muted" style="margin-bottom: 0px;">@Uptime</p>
                     </div>
                 </div>
             </div>
-            <div class="container-fluid">
+            <div class="container-fluid" style="padding: 0px;">
                 <div class="row">
-                    <div class="col-md-7">
+                    <div class="col-md-7 ">
                         <div class="card mb-2">
                             <div class="card-body p-2" style="height: 100%">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label>Терминал: </label>
-                                    <div style="height: 100%">
-                                        <button class="btn btn-sm btn-outline-danger me-1" @onclick="ClearTerminal" title="Очистить терминал">
-                                            <i class="bi bi-trash">❌</i>
+                                    <label>
+                                        @(_showSensorsView ? "Датчики" : "Терминал")
+                                    </label>
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-info me-1"
+                                                @onclick="ToggleView"
+                                                title="Переключить отображение">
+                                            <i class="bi bi-speedometer2">👁</i>
                                         </button>
-                                        <span class="badge bg-secondary">@Shuttle.GetTerminalMessages().Count строк</span>
+
+                                        @if (!_showSensorsView)
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger me-1"
+                                                    @onclick="ClearTerminal">
+                                                ❌
+                                            </button>
+
+                                            <span class="badge bg-secondary">
+                                                @Shuttle.GetTerminalMessages().Count строк
+                                            </span>
+                                        }
                                     </div>
                                 </div>
-                                <div id="terminalContainer_@ComponentId"
-                                     class="terminal-container border rounded"
-                                     style="height: 448px;">
-                                    @((MarkupString)TerminalOutputHtml)
-                                </div>
-                                <div class="input-group input-group-sm mt-2">
-                                    <span class="input-group-text">
-                                        <i class="bi bi-terminal"></i>
-                                    </span>
-                                    <InputText @bind-Value="ManualCommand"
-                                               class="form-control form-control-sm"
-                                               placeholder="Введите команду..."
-                                               @onkeypress="HandleKeyPress"
-                                               disabled="@(!IsConnected || _isCommandInProgress)" />
-                                    <button class="btn btn-primary btn-sm"
-                                            @onclick="SendManualCommand">
-                                        <i class="bi bi-send"></i> Отпр
-                                    </button>
-                                </div>
+                                @if (_showSensorsView)
+                                {
+                                    <ShuttleDataSensorComponent Shuttle="Shuttle" />
+                                }
+                                else
+                                {
+                                    <div id="terminalContainer_@ComponentId"
+                                         class="terminal-container border rounded"
+                                         style="height: 448px;">
+                                        @((MarkupString)TerminalOutputHtml)
+                                    </div>
+
+                                    <div class="input-group input-group-sm mt-2">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-terminal"></i>
+                                        </span>
+                                        <InputText @bind-Value="ManualCommand"
+                                                   class="form-control form-control-sm"
+                                                   placeholder="Введите команду..."
+                                                   @onkeypress="HandleKeyPress"
+                                                   disabled="@(!IsConnected || _isCommandInProgress)" />
+                                        <button class="btn btn-primary btn-sm"
+                                                @onclick="SendManualCommand">
+                                            Отпр
+                                        </button>
+                                    </div>
+                                }
                             </div>
                         </div>
                         <div class="col-12 mb-2">
@@ -111,17 +132,17 @@
                                     <div class="row g-1">
                                         <div class="col-6 mb-1">
                                             <button class="btn btn-danger btn-sm w-100" @onclick="SendResetCommand" title="Сброс текущих ошибок">
-                                                <i class="bi bi-arrow-counterclockwise me-1"></i>Сброс ошибок
+                                                <i class="bi bi-arrow-counterclockwise me-1">Сброс ошибок</i>
                                             </button>
                                         </div>
                                         <div class="col-6 mb-1">
                                             <button class="btn btn-secondary btn-sm w-100" @onclick="SendCalibrateCommand" title="Запуск процедуры калибровки">
-                                                <i class="bi bi-rulers me-1"></i>Калибровка
+                                                <i class="bi bi-rulers me-1">Калибровка</i>
                                             </button>
                                         </div>
                                         <div class="col-12">
                                             <button class="btn btn-danger btn-sm w-100 " @onclick="SendRebootShuttleCommand" title="Полная перезагрузка шаттла">
-                                                <i class="bi bi-arrow-repeat me-1"></i>Перезагрузка
+                                                <i class="bi bi-arrow-repeat me-1">⟳</i>
                                             </button>
                                         </div>
                                     </div>
@@ -133,36 +154,16 @@
                                 <div class="card-body p-2">
                                     <div class="row g-1">
                                         <div class="col-6">
-                                            @*  <div class="mb-1">
-                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaDisplayUpdate" title="OTA Display">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>⚠️display firmware
-                                                </button>
-                                            </div> *@
-                                            @* <div class="mb-1">
-                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>Обновление прошивки экрана (UPD) (Browser)
-                                                </button>
-                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SetTime" title="Установить время">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>Установить время
+                                                    <i class="bi bi-arrow-clockwise me-1">Установить время</i>
                                                 </button>
                                             </div>
                                         </div>
                                         <div class="col-6">
-                                            @*   <div class="mb-1">
-                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaStmUpdate" title="OTA STM">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>⚠️STM firmware
-                                                </button>
-                                            </div> *@
-                                            @*  <div class="mb-1">
-                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
-                                                    <i class="bi bi-cloud-arrow-up me-1"></i>Обновление прошивки платы (FRM) (Browser)
-                                                </button>
-                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenLogsShuttle" title="Открыть логи шаттла" disabled="@(OperatingSystem.IsAndroid())">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>Логи шаттла
+                                                    <i class="bi bi-arrow-clockwise me-1">🖿 Логи</i>
                                                 </button>
                                             </div>
                                         </div>
@@ -207,7 +208,7 @@
                                                 </button>
                                             </div>
                                             <div class="col-6 mb-1">
-                                                <button class="btn btn-warning btn-sm w-100" @onclick="SendSealingBackShuttleCommand" title="Уплотнение назад">
+                                                <button class="btn btn-success btn-sm w-100" @onclick="SendSealingBackShuttleCommand" title="Уплотнение назад">
                                                     <i class="bi bi-arrows-angle-expand me-1"></i>Уплотнение назад
                                                 </button>
                                             </div>
@@ -243,7 +244,7 @@
                                             </div>
 
                                             <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendLeftShuttleCommand" title="Движение влево">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @* @onclick="SendLeftShuttleCommand" *@ title="Движение влево">
                                                     <i class="bi bi-arrow-left-square me-1"></i>← назад ←
                                                 </button>
                                             </div>
@@ -253,7 +254,7 @@
                                                 </button>
                                             </div>
                                             <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendRightShuttleCommand" title="Движение вправо">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @* @onclick="SendRightShuttleCommand" *@ title="Движение вправо">
                                                     <i class="bi bi-arrow-right-square me-1"></i>→ вперёд →
                                                 </button>
                                             </div>
@@ -408,7 +409,6 @@
     private int MaxSpeedInput = 0;
     private int MinPowerInput = 0;
     private int PallentDistance = 0;
-    private string NameOfFirmware = "";
     private bool isAndroid => OperatingSystem.IsAndroid();
 
     private string _terminalOutputHtml = "";
@@ -434,7 +434,7 @@
     private string pathLogShuttle = "";
 
     private readonly List<string> _statusBlockLines = new();
-    private bool _inStatusBlock = false;
+    //private bool _inStatusBlock = false;
 
     private string? _selectedFile;
     private int _otaPercent;
@@ -579,7 +579,10 @@
             else if (msg is StatsMessage stm) UpdateStats(stm.Data);
             else if (msg is ConfigMessage cm) UpdateConfig(cm.Data);
 
-            LogToTerminal($"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
+            if (msg is RawLogMessage or AckMessage or ConfigMessage)
+            {
+                LogToTerminal($"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
+            }
             StateHasChanged();
         });
     }
@@ -730,7 +733,7 @@
     private async Task SendLargeLoadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_LOAD, 0, 0, "Длительная загрузка");
     private async Task SendUnloadCommand() => await SendBinaryCmd(CmdType.CMD_UNLOAD, 0, 0, "Выгрузка");
     private async Task SendLargeUnloadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_UNLOAD, 0, 0, "Длительная выгрузка");
-    private async Task SendManualShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MANUAL_MODE, 0, 0, "Ручной режим");
+    // private async Task SendManualShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MANUAL_MODE, 0, 0, "Ручной режим");
     private async Task SendDemoCommand() => await SendBinaryCmd(CmdType.CMD_DEMO, 0, 0, "Демо-режим");
     private async Task SendResetCommand() => await SendBinaryCmd(CmdType.CMD_RESET_ERROR, 0, 0, "Сброс ошибок");
     private async Task SendSaveSettingCommand() => await SendBinaryCmd(CmdType.CMD_SAVE_EEPROM, 0, 0, "Сохранение настроек");
@@ -740,8 +743,8 @@
     private async Task SendSealingForwardShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_F, 0, 0, "Уплотнение вперед");
     private async Task SendSealingBackShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_R, 0, 0, "Уплотнение назад");
     private async Task SendUpShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_UP, 0, 0, "Подъём");
-    private async Task SendLeftShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_LEFT_MAN, 0, 0, "движение назад");
-    private async Task SendRightShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_RIGHT_MAN, 0, 0, "движение вперёд");
+    // private async Task SendLeftShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_LEFT_MAN, 0, 0, "движение назад");
+    // private async Task SendRightShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_RIGHT_MAN, 0, 0, "движение вперёд");
     private async Task SendDownShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_DOWN, 0, 0, "Спуск");
     private async Task SendRebootShuttleCommand() => await SendBinaryCmd(CmdType.CMD_SYSTEM_RESET, 0, 0, "Reboot shuttle");
     private async Task SendSetMoveReverseShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_DIST_R, MoveDistanceBackwardInput, 0, $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм");
@@ -772,26 +775,6 @@
         {
             await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 0, "Реверс режим off");
             isReversed = false;
-        }
-    }
-
-    private async Task OpenWebInterfaceAsync(string argOpenBrowser)
-    {
-        var url = $"http://{Shuttle.IPAddress}/";
-        if (argOpenBrowser == "UPD")
-        {
-            url += "update";
-        }
-        try
-        {
-            var uri = new Uri(url);
-            await WebBrowserService.OpenBrowserAsync(uri);
-            LogToTerminal($"[INFO] Открыт веб-интерфейс: {url}\n");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Ошибка открытия веб-интерфейса {Url}", url);
-            LogToTerminal($"[ERROR] Не удалось открыть браузер: {ex.Message}\n");
         }
     }
 

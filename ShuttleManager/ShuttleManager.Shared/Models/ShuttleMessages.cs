@@ -51,6 +51,7 @@ namespace ShuttleManager.Shared.Models
     public class ConfigMessage : ShuttleMessageBase
     {
         public ConfigPacket Data { get; set; }
+
         public override string ToFormattedTerminalString()
         {
             return $"[CONFIG] Param: {(ConfigParamID)Data.ParamID}, Value: {Data.Value}";
@@ -60,6 +61,7 @@ namespace ShuttleManager.Shared.Models
     public class AckMessage : ShuttleMessageBase
     {
         public AckPacket Data { get; set; }
+
         public override string ToFormattedTerminalString()
         {
             return $"[ACK] RefSeq: {Data.RefSeq}, Result: {Data.Result}";

@@ -1,0 +1,32 @@
+﻿<div class="sensor-tile">
+    <div class="title">@Title</div>
+    <div class="value @GetStateClass()">
+        @if (IsFloat)
+        {
+            @($"{Value:0.0}") @Unit
+        }
+        else
+        {
+            @Value
+            @Unit
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public double Value { get; set; }
+    [Parameter] public string Unit { get; set; } = "";
+    [Parameter] public bool IsFloat { get; set; }
+
+    private string GetStateClass()
+    {
+        if (Title.Contains("Temp") && Value > 60)
+            return "sensor-danger";
+
+        if (Title.Contains("Front") && Value < 100)
+            return "sensor-warning";
+
+        return "sensor-ok";
+    }
+}

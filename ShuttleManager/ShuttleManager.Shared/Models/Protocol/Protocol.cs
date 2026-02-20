@@ -25,10 +25,12 @@ namespace ShuttleManager.Shared.Models.Protocol
     public enum CmdType : byte
     {
         CMD_STOP = 5,   // "dStop_"
-        CMD_STOP_MANUAL = 55,  // "dStopM"
-        CMD_MOVE_RIGHT_MAN = 1,   // "dRight"
-        CMD_MOVE_LEFT_MAN = 2,   // "dLeft_"
+
+        //CMD_STOP_MANUAL     = 55,  // "dStopM"
+        //CMD_MOVE_RIGHT_MAN  = 1,   // "dRight"
+        //CMD_MOVE_LEFT_MAN   = 2,   // "dLeft_"
         CMD_LIFT_UP = 3,   // "dUp___"
+
         CMD_LIFT_DOWN = 4,   // "dDown_"
         CMD_LOAD = 6,   // "dLoad_"
         CMD_UNLOAD = 7,   // "dUnld_"
@@ -41,19 +43,24 @@ namespace ShuttleManager.Shared.Models.Protocol
         CMD_COMPACT_F = 14,  // "dComFo"
         CMD_COMPACT_R = 15,  // "dComBa"
         CMD_GET_CONFIG = 16,  // "dSGet_" / "dSpGet"
-        CMD_TEST_SENSORS = 17,  // "dDataP"
-        CMD_ERROR_REQ = 19,  // "tError"
-        CMD_EVACUATE_ON = 20,  // "dEvOn_"
-        CMD_EVACUATE_OFF = 28,  // "dEvOff"
+
+        //CMD_TEST_SENSORS    = 17,  // "dDataP"
+        //CMD_ERROR_REQ       = 19,  // "tError"
+        //CMD_EVACUATE_ON     = 20,  // "dEvOn_"
+        //CMD_EVACUATE_OFF    = 28,  // "dEvOff"
         CMD_LONG_LOAD = 21,  // "dLLoad"
+
         CMD_LONG_UNLOAD = 22,  // "dLUnld"
         CMD_LONG_UNLOAD_QTY = 23,  // "dQt"
         CMD_RESET_ERROR = 24,  // "dReset"
-        CMD_MANUAL_MODE = 25,  // "dManua"
-        CMD_LOG_MODE = 26,  // "dGetLg"
+
+        //CMD_MANUAL_MODE     = 25,  // "dManua"
+        //CMD_LOG_MODE        = 26,  // "dGetLg"
         CMD_HOME = 27,  // "dHome_"
-        CMD_PING = 100, // "ngPing"
+
+        //CMD_PING            = 100, // "ngPing"
         CMD_FIRMWARE_UPDATE = 200, // "Firmware"
+
         CMD_SYSTEM_RESET = 201, // "Reboot__"
         CMD_SET_DATETIME = 202  // "DT"
     }

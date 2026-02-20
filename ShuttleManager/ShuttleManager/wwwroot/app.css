@@ -129,9 +129,8 @@ h1:focus {
     --scrollbar-thumb-bg: #a0a0a0;
     --scrollbar-thumb-hover-bg: #888888;
     --card-header-text-color: var(--text-color);
-    --card-header-h5-color: var(--text-color); 
-    --card-header-h6-color: var(--text-color)
-    --badge-connected-text-color: #ffffff; 
+    --card-header-h5-color: var(--text-color);
+    --card-header-h6-color: var(--text-color) --badge-connected-text-color: #ffffff;
     --text-muted-color: #6c757d;
 }
 
@@ -504,4 +503,94 @@ body {
 /* Добавим плавный переход */
 * {
     transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ============================= */
+/* SENSOR PANEL (theme adaptive) */
+/* ============================= */
+
+.sensor-panel {
+    background-color: var(--card-body-bg);
+    color: var(--text-color);
+    font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.sensor-tile {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 6px 8px;
+    height: 100%;
+}
+
+    .sensor-tile .title {
+        font-size: 11px;
+        color: var(--text-muted-color);
+        letter-spacing: 0.5px;
+    }
+
+    .sensor-tile .value {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-color);
+    }
+
+/* ===== Hardware indicators ===== */
+
+.hardware-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.hw-indicator {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    font-size: 11px;
+    text-align: center;
+    padding: 6px 4px;
+    border-radius: 4px;
+    color: var(--text-muted-color);
+    font-weight: 500;
+}
+
+    /* ACTIVE state uses success color from theme */
+
+    .hw-indicator.active {
+        background-color: var(--badge-bg-success);
+        color: var(--badge-text-color-success);
+        border-color: var(--badge-bg-success);
+        font-weight: 600;
+    }
+
+/* ===== Value state modifiers ===== */
+
+.sensor-ok {
+    color: var(--badge-bg-success);
+}
+
+.sensor-warning {
+    color: var(--badge-bg-warning);
+}
+
+.sensor-danger {
+    color: var(--btn-danger-bg);
+}
+
+/* ===== Compact spacing to match existing layout ===== */
+
+.sensor-panel .row {
+    margin-left: -4px;
+    margin-right: -4px;
+}
+
+.sensor-panel .col-6,
+.sensor-panel .col-12 {
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+/* Slight hover feedback (industrial subtle) */
+.sensor-tile:hover {
+    border-color: var(--btn-outline-primary-border-color);
 }

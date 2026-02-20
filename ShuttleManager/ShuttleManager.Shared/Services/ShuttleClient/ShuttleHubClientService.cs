@@ -412,7 +412,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             frame[5] = (byte)MsgID.MSG_COMMAND;
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cmdPacket);
+            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), in cmdPacket);
 
             // CRC
             ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
@@ -477,7 +477,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             frame[5] = (byte)MsgID.MSG_CONFIG_SET;
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cfgPacket);
+            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), in cfgPacket);
 
             // CRC
             ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));

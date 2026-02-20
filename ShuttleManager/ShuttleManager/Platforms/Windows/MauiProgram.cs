@@ -4,7 +4,6 @@ using ShuttleManager.Shared.Services.FilePicker;
 using ShuttleManager.Shared.Services.OtaUpdate;
 using ShuttleManager.Shared.Services.ShuttleClient;
 using ShuttleManager.Shared.Services.TcpOfClient;
-using ShuttleManager.Shared.Services.WebBrowser;
 
 namespace ShuttleManager.Platforms.Windows;
 
@@ -18,22 +17,18 @@ public static class MauiProgram
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-
-
             });
 
         builder.Services.AddSingleton<ITcpClientService, TcpClientService>();
         builder.Services.AddSingleton<IShuttleHubClientService, ShuttleHubClientService>();
         builder.Services.AddSingleton<IFilePickerService, FilePickerService>();
-        builder.Services.AddSingleton<IWebBrowserService, WebBrowserService>();
         builder.Services.AddSingleton<IOtaUpdateService, OtaUpdateService>();
         builder.Services.AddMauiBlazorWebView();
-        #if DEBUG
+#if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
-            builder.Logging.AddDebug();
-        #endif
+        builder.Logging.AddDebug();
+#endif
 
         return builder.Build();
     }
-
 }

@@ -52,16 +52,13 @@ namespace ShuttleManager.WinUI
                     if (appWindow != null)
                     {
                         appWindow.Title = "[MICRON] Менеджер шаттлов S.V.3.2";
-                        // Устанавливаем размер окна
-                        //appWindow.Resize(new Windows.Graphics.SizeInt32(3840, 2160));
-                        //appWindow.Resize(new Windows.Graphics.SizeInt32(1920, 1080));
 
                         // Отключаем возможность изменения размера
                         var presenter = appWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
                         if (presenter != null)
                         {
-                            presenter.IsResizable = false;
-                            presenter.IsMaximizable = false;
+                            presenter.IsResizable = true;
+                            presenter.IsMaximizable = true;
                             presenter.IsMinimizable = true;
                         }
                     }

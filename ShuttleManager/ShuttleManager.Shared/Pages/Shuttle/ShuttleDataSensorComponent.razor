@@ -1,5 +1,68 @@
-﻿<h3>ShuttleDataSensorComponent</h3>
+﻿@using ShuttleManager.Shared.Models
+
+<div class="sensor-panel card border-0">
+    <div class="card-body p-2">
+
+        <!-- DISTANCES -->
+        <div class="row g-1 mb-2">
+            <div class="col-6">
+                <SensorTile Title="Front"
+                            Value="@Shuttle.ForwardDistance"
+                            Unit="mm" />
+            </div>
+            <div class="col-6">
+                <SensorTile Title="Rear"
+                            Value="@Shuttle.ReverseDistance"
+                            Unit="mm" />
+            </div>
+            <div class="col-6">
+                <SensorTile Title="Plt Front"
+                            Value="@Shuttle.ForwardPalletDistance"
+                            Unit="mm" />
+            </div>
+            <div class="col-6">
+                <SensorTile Title="Plt Rear"
+                            Value="@Shuttle.ReversePalletDistance"
+                            Unit="mm" />
+            </div>
+        </div>
+
+        <!-- ANGLE + TEMP -->
+        <div class="row g-1 mb-2">
+            <div class="col-6">
+                <SensorTile Title="Angle"
+                            Value="@Shuttle.Angle"
+                            Unit="°" />
+            </div>
+            <div class="col-6">
+                <SensorTile Title="Temp"
+                            Value="@Shuttle.Temperature"
+                            Unit="°C"
+                            IsFloat="true" />
+            </div>
+        </div>
+
+        <!-- HARDWARE STATE -->
+        <div class="row g-1">
+            <div class="col-12">
+                <div class="hardware-grid">
+
+                    <HardwareIndicator Label="PF1" Active="@(Shuttle.PalletDetectorFront1 == 1)" />
+                    <HardwareIndicator Label="PF2" Active="@(Shuttle.PalletDetectorFront2 == 1)" />
+                    <HardwareIndicator Label="PR1" Active="@(Shuttle.PalletDetectorRear1 == 1)" />
+                    <HardwareIndicator Label="PR2" Active="@(Shuttle.PalletDetectorRear2 == 1)" />
+
+                    <HardwareIndicator Label="Bumper F" Active="@(Shuttle.BumperForward == 1)" />
+                    <HardwareIndicator Label="Bumper R" Active="@(Shuttle.BumperReverse == 1)" />
+
+                    <HardwareIndicator Label="Lifter ↑" Active="@Shuttle.IsLifterUp" />
+                    <HardwareIndicator Label="Lifter ↓" Active="@Shuttle.IsLifterDown" />
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 @code {
-
+    [Parameter] public Shuttle Shuttle { get; set; } = default!;
 }

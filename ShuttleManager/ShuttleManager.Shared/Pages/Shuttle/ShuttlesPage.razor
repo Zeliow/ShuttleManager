@@ -7,13 +7,7 @@
 @inject IShuttleHubClientService HubClientService
 @using ShuttleManager.Shared.Models
 
-@* <PageTitle>Панель управления шаттлами</PageTitle> *@
-
 <div class="container-fluid">
-    @*     <div class="header-app" style="padding-bottom:5px;">
-        <h5 style="display:inline; margin-right: 5px; ">Панель управления шаттлами</h5>
-    </div> *@
-
     <div class="row">
         <div class="col-md-3">
             <div class="card mb-3">
@@ -99,7 +93,7 @@
             @if (_connectedShuttles.Any())
             {
 
-                <ul class="nav nav-tabs mb-3">
+                @* <ul class="nav nav-tabs mb-3">
                     @foreach (var (shuttle, index) in _connectedShuttles.Select((s, i) => (s, i)))
                     {
                         <li class="nav-item">
@@ -117,7 +111,7 @@
                             </a>
                         </li>
                     }
-                </ul>
+                </ul> *@
 
                 @if (ActiveTabIndex >= 0 && ActiveTabIndex < _connectedShuttles.Count)
                 {
