@@ -594,3 +594,46 @@ body {
 .sensor-tile:hover {
     border-color: var(--btn-outline-primary-border-color);
 }
+
+.ota-box {
+    max-width: 420px;
+    padding: 16px 0;
+}
+
+.ota-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+
+.ota-bar {
+    width: 100%;
+    height: 6px;
+    background: #e5e5e5;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ota-fill {
+    height: 100%;
+    background: #2d7ff9;
+    transition: width 0.2s ease;
+}
+
+.ota-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+}
+
+.ota-cancel {
+    background: none;
+    border: none;
+    color: #c62828;
+    cursor: pointer;
+    font-size: 12px;
+}

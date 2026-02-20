@@ -222,7 +222,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     }
 
                     // Validate CRC
-                    ushort receivedCrc = BinaryPrimitives.ReadUInt16BigEndian(new ReadOnlySpan<byte>(data, syncIndex + 6 + payloadLength, 2));
+                    ushort receivedCrc = BinaryPrimitives.ReadUInt16LittleEndian(new ReadOnlySpan<byte>(data, syncIndex + 6 + payloadLength, 2));
                     ushort calculatedCrc = Crc16Ccitt(new ReadOnlySpan<byte>(data, syncIndex, 6 + payloadLength));
 
                     if (receivedCrc == calculatedCrc)
@@ -412,11 +412,11 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             frame[5] = (byte)MsgID.MSG_COMMAND;
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), in cmdPacket);
+            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cmdPacket);
 
             // CRC
             ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
-            BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(6 + payloadSize, 2), crc);
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
 
             try
             {
@@ -477,7 +477,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             frame[5] = (byte)MsgID.MSG_CONFIG_SET;
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), in cfgPacket);
+            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cfgPacket);
 
             // CRC
             ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));

@@ -1,0 +1,179 @@
+﻿@using ShuttleManager.Shared.Models
+<div class="scada-container">
+
+    <svg viewBox="0 0 400 700" class="scada-svg">
+
+        <!-- BODY -->
+        <rect x="50" y="50" width="300" height="600"
+              rx="30"
+              class="shuttle-body @GetBodyState()" />
+
+        <!-- FRONT ZONE -->
+        <rect x="120" y="40" width="160" height="60"
+              rx="15"
+              class="zone-front @GetFrontZoneState()" />
+
+        <!-- REAR ZONE -->
+        <rect x="120" y="600" width="160" height="60"
+              rx="15"
+              class="zone-rear @GetRearZoneState()" />
+
+        <!-- PALLET DETECTORS -->
+        <circle cx="90" cy="200" r="15"
+                class="sensor-dot @GetBoolState(Shuttle.PalletDetectorFront1 == 1)" />
+
+        <circle cx="310" cy="200" r="15"
+                class="sensor-dot @GetBoolState(Shuttle.PalletDetectorFront2 == 1)" />
+
+        <circle cx="90" cy="500" r="15"
+                class="sensor-dot @GetBoolState(Shuttle.PalletDetectorRear1 == 1)" />
+
+        <circle cx="310" cy="500" r="15"
+                class="sensor-dot @GetBoolState(Shuttle.PalletDetectorRear2 == 1)" />
+
+        <!-- LIFTER -->
+        <rect x="160" y="300" width="80" height="100"
+              rx="10"
+              class="lifter @GetLifterState()" />
+    </svg>
+
+    <!-- STATUS BAR -->
+    <div class="scada-status">
+
+        <div>F: @Shuttle.ForwardDistance mm</div>
+        <div>R: @Shuttle.ReverseDistance mm</div>
+        <div>Temp: @Shuttle.Temperature °C</div>
+        <div>Angle: @Shuttle.Angle °</div>
+    </div>
+</div>
+
+<style>
+    .scada-container {
+        background-color: var(--card-body-bg);
+        padding: 10px;
+    }
+
+    .scada-svg {
+        width: 100%;
+        max-height: 500px;
+    }
+
+    /* Body */
+    .shuttle-body {
+        fill: var(--card-bg);
+        stroke: var(--border-color);
+        stroke-width: 3;
+    }
+
+        /* Collision */
+        .shuttle-body.collision {
+            stroke: var(--btn-danger-bg);
+            stroke-width: 6;
+        }
+
+        /* Overheat */
+        .shuttle-body.overheat {
+            stroke: var(--badge-bg-warning);
+            stroke-width: 6;
+        }
+
+    /* Zones */
+    .zone-front,
+    .zone-rear {
+        fill: var(--card-bg);
+        stroke: var(--border-color);
+        stroke-width: 2;
+    }
+
+        .zone-front.ok,
+        .zone-rear.ok {
+            fill: var(--badge-bg-success);
+            opacity: 0.4;
+        }
+
+        .zone-front.warning,
+        .zone-rear.warning {
+            fill: var(--badge-bg-warning);
+            opacity: 0.5;
+        }
+
+        .zone-front.danger,
+        .zone-rear.danger {
+            fill: var(--btn-danger-bg);
+            opacity: 0.6;
+        }
+
+    /* Sensor dots */
+    .sensor-dot {
+        fill: var(--card-bg);
+        stroke: var(--border-color);
+        stroke-width: 2;
+    }
+
+        .sensor-dot.active {
+            fill: var(--badge-bg-success);
+            stroke: var(--badge-bg-success);
+        }
+
+    /* Lifter */
+    .lifter {
+        fill: var(--card-bg);
+        stroke: var(--border-color);
+        stroke-width: 2;
+    }
+
+        .lifter.lifter-up {
+            fill: var(--badge-bg-success);
+        }
+
+        .lifter.lifter-down {
+            fill: var(--btn-info-bg);
+        }
+
+    /* Status bar */
+    .scada-status {
+        margin-top: 8px;
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+        color: var(--text-muted-color);
+    }
+</style>
+@code {
+    [Parameter] public Shuttle Shuttle { get; set; } = default!;
+
+    private string GetFrontZoneState()
+    {
+        if (Shuttle.ForwardDistance < 100) return "danger";
+        if (Shuttle.ForwardDistance < 200) return "warning";
+        return "ok";
+    }
+
+    private string GetRearZoneState()
+    {
+        if (Shuttle.ReverseDistance < 100) return "danger";
+        if (Shuttle.ReverseDistance < 200) return "warning";
+        return "ok";
+    }
+
+    private string GetBodyState()
+    {
+        if (Shuttle.BumperForward == 1 || Shuttle.BumperReverse == 1)
+            return "collision";
+
+        if (Shuttle.Temperature > 70)
+            return "overheat";
+
+        return "";
+    }
+
+    private string GetBoolState(bool active)
+        => active ? "active" : "";
+
+    private string GetLifterState()
+    {
+        if (Shuttle.IsLifterUp) return "lifter-up";
+        if (Shuttle.IsLifterDown) return "lifter-down";
+        return "";
+    }
+}

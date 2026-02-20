@@ -9,7 +9,8 @@ public sealed class OtaUpdateService : IOtaUpdateService
 {
     private readonly ILogger<OtaUpdateService> _logger;
 
-    public OtaUpdateService(ILogger<OtaUpdateService> logger) => _logger = logger;
+    public OtaUpdateService(ILogger<OtaUpdateService> logger)
+        => _logger = logger;
 
     private const byte CMD_INIT = 0x01;
     private const byte CMD_ERASE = 0x02;
@@ -18,12 +19,13 @@ public sealed class OtaUpdateService : IOtaUpdateService
     private const byte CMD_WRITE_STREAM = 0x05;
 
     private const byte RESP_OK = 0xAA;
-    private const byte RESP_FAIL = 0xFF;
 
     private const int STM_PORT = 8080;
     private const int ESP_PORT = 8081;
 
     private const uint STM_BASE_ADDRESS = 0x08000000;
+
+    // ================= PUBLIC =================
 
     public async Task<OtaResult> RunAsync(
         string ip,
@@ -40,77 +42,60 @@ public sealed class OtaUpdateService : IOtaUpdateService
             return OtaResult.Fail("Only .bin supported");
 
         var firmware = await File.ReadAllBytesAsync(filePath, token);
-        var stopWatch = Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
 
         try
         {
-            _logger.LogInformation("Initiating OTA Update for {Target} on {Ip}. File size: {Size} bytes. Full Erase: {FullErase}", target, ip, firmware.Length, fullErase);
-
             var result = target == OtaTarget.Stm32
                 ? await RunStmAsync(ip, firmware, progress, token, fullErase)
                 : await RunEspAsync(ip, firmware, progress, token);
 
-            stopWatch.Stop();
+            sw.Stop();
+
             if (result.IsSuccess)
-            {
-                _logger.LogInformation("OTA Update Successful. Time elapsed: {Elapsed}s", stopWatch.Elapsed.TotalSeconds.ToString("F2"));
-            }
+                _logger.LogInformation("OTA Successful in {Sec}s", sw.Elapsed.TotalSeconds.ToString("F2"));
             else
-            {
-                _logger.LogError("OTA Update Failed. Time elapsed: {Elapsed}s. Error: {Error}", stopWatch.Elapsed.TotalSeconds.ToString("F2"), result.Error);
-            }
+                _logger.LogError("OTA Failed in {Sec}s: {Error}", sw.Elapsed.TotalSeconds.ToString("F2"), result.Error);
 
             return result;
         }
         catch (OperationCanceledException)
         {
-            return OtaResult.Fail("OTA Cancelled by user");
+            return OtaResult.Fail("OTA Cancelled");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "OTA Update Critical Exception");
-            return OtaResult.Fail($"Exception: {ex.Message}");
+            _logger.LogError(ex, "OTA Critical Error");
+            return OtaResult.Fail(ex.Message);
         }
     }
 
     // ================= STM =================
 
     private async Task<OtaResult> RunStmAsync(
-    string ip,
-    byte[] fw,
-    IProgress<OtaProgress>? progress,
-    CancellationToken token,
-    bool fullErase)
+        string ip,
+        byte[] fw,
+        IProgress<OtaProgress>? progress,
+        CancellationToken token,
+        bool fullErase)
     {
         using var client = new TcpClient();
         client.NoDelay = true;
         client.SendBufferSize = 64 * 1024;
 
-        _logger.LogInformation("[STM] Connecting to {Ip}:{Port}...", ip, STM_PORT);
         await client.ConnectAsync(ip, STM_PORT, token);
         using var stream = client.GetStream();
 
-        // 1. INIT
-        _logger.LogInformation("[STM] Sending CMD_INIT (Entering Bootloader/Syncing)...");
-        stream.ReadTimeout = 5000;
+        // INIT
         await SendByte(stream, CMD_INIT, token);
         await EnsureOk(stream, token);
-        _logger.LogInformation("[STM] Bootloader Initialized.");
 
-        // 2. ERASE
-        string eraseMode = fullErase ? "MASS ERASE (Deleting Config)" : "Smart Erase (Preserving Config)";
-        _logger.LogInformation("[STM] Sending CMD_ERASE ({Mode} - This may take 30-45s)...", eraseMode);
-        stream.ReadTimeout = 60000;
-
+        // ERASE
         await SendByte(stream, CMD_ERASE, token);
-        // Send Erase Mode Byte: 0x01 = Full, 0x00 = Smart
         await SendByte(stream, fullErase ? (byte)0x01 : (byte)0x00, token);
-
         await EnsureOk(stream, token);
-        _logger.LogInformation("[STM] Flash Erased.");
 
-        // 3. STREAM WRITE
-        _logger.LogInformation("[STM] Starting Firmware Stream (Fast Mode)...");
+        // STREAM COMMAND
         await SendByte(stream, CMD_WRITE_STREAM, token);
 
         var header = new byte[8];
@@ -118,40 +103,47 @@ public sealed class OtaUpdateService : IOtaUpdateService
         BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), (uint)fw.Length);
         await stream.WriteAsync(header, token);
 
-        stream.ReadTimeout = 5000;
         await EnsureOk(stream, token);
 
-        const int progressChunkSize = 8192;
+        // === PHASE 1: UPLOAD (0-70%) ===
+
+        const int chunkSize = 8192;
         int offset = 0;
-        int lastLogPercent = 0;
 
         while (offset < fw.Length)
         {
             token.ThrowIfCancellationRequested();
 
-            int len = Math.Min(progressChunkSize, fw.Length - offset);
+            int len = Math.Min(chunkSize, fw.Length - offset);
             await stream.WriteAsync(fw.AsMemory(offset, len), token);
 
             offset += len;
-            progress?.Report(new OtaProgress(offset, fw.Length));
 
-            int percent = (int)((offset * 100) / fw.Length);
-            if (percent - lastLogPercent >= 20) // Log every 20%
-            {
-                _logger.LogInformation("[STM] Uploading... {Percent}%", percent);
-                lastLogPercent = percent;
-            }
+            double uploadRatio = (double)offset / fw.Length;
+            int uiPercent = (int)(uploadRatio * 70);
+
+            progress?.Report(new OtaProgress(uiPercent, 100));
         }
 
-        // 4. WAIT FOR COMPLETION
-        _logger.LogInformation("[STM] Upload complete. Waiting for device processing & verification...");
+        // === PHASE 2: FLASHING WAIT (70-95%) ===
+
+        progress?.Report(new OtaProgress(70, 100));
+
+        var flashingAnimation = AnimateProgressAsync(progress, 70, 95, 500, token);
+
         stream.ReadTimeout = 45000;
         await EnsureOk(stream, token);
 
-        // 5. RUN
-        _logger.LogInformation("[STM] Sending CMD_RUN (Rebooting target)...");
+        await flashingAnimation;
+
+        // === PHASE 3: FINALIZE (95-100%) ===
+
+        progress?.Report(new OtaProgress(95, 100));
+
         await SendByte(stream, CMD_RUN, token);
         await EnsureOk(stream, token);
+
+        progress?.Report(new OtaProgress(100, 100));
 
         return OtaResult.Success();
     }
@@ -166,75 +158,84 @@ public sealed class OtaUpdateService : IOtaUpdateService
     {
         using var client = new TcpClient();
         client.NoDelay = true;
-        client.SendBufferSize = 64 * 1024;
 
-        _logger.LogInformation("[ESP] Connecting to {Ip}:{Port}...", ip, ESP_PORT);
         await client.ConnectAsync(ip, ESP_PORT, token);
         using var stream = client.GetStream();
 
-        // 1. INIT
-        _logger.LogInformation("[ESP] Sending CMD_INIT (Begin Update)...");
-        stream.ReadTimeout = 5000;
+        // INIT
         await SendByte(stream, CMD_INIT, token);
 
         var sizeBytes = new byte[4];
         BinaryPrimitives.WriteUInt32LittleEndian(sizeBytes, (uint)fw.Length);
         await stream.WriteAsync(sizeBytes, token);
-
         await EnsureOk(stream, token);
 
-        // 2. STREAM COMMAND
-        _logger.LogInformation("[ESP] Sending CMD_WRITE_STREAM (Turbo Mode)...");
+        // STREAM
         await SendByte(stream, CMD_WRITE_STREAM, token);
-
         await stream.WriteAsync(sizeBytes, token);
         await EnsureOk(stream, token);
 
-        // 3. STREAM DATA
-        _logger.LogInformation("[ESP] Streaming Firmware...");
-
-        const int progressChunkSize = 8192;
+        const int chunkSize = 8192;
         int offset = 0;
-        int lastLogPercent = 0;
 
+        // === PHASE 1: UPLOAD (0-70%) ===
         while (offset < fw.Length)
         {
             token.ThrowIfCancellationRequested();
 
-            int len = Math.Min(progressChunkSize, fw.Length - offset);
+            int len = Math.Min(chunkSize, fw.Length - offset);
             await stream.WriteAsync(fw.AsMemory(offset, len), token);
 
             offset += len;
-            progress?.Report(new OtaProgress(offset, fw.Length));
 
-            int percent = (int)((offset * 100) / fw.Length);
-            if (percent - lastLogPercent >= 20)
-            {
-                _logger.LogInformation("[ESP] Uploading... {Percent}%", percent);
-                lastLogPercent = percent;
-            }
+            double ratio = (double)offset / fw.Length;
+            int uiPercent = (int)(ratio * 70);
+
+            progress?.Report(new OtaProgress(uiPercent, 100));
         }
 
-        // 4. WAIT FOR COMPLETION
-        _logger.LogInformation("[ESP] Upload complete. Waiting for flash finish...");
+        // === PHASE 2: FLASH WAIT ===
+
+        progress?.Report(new OtaProgress(70, 100));
+        var flashingAnimation = AnimateProgressAsync(progress, 70, 95, 400, token);
+
         stream.ReadTimeout = 30000;
         await EnsureOk(stream, token);
 
-        // 5. RUN
-        _logger.LogInformation("[ESP] Sending CMD_RUN (Finalizing & Restarting)...");
+        await flashingAnimation;
+
+        // === FINAL ===
+
+        progress?.Report(new OtaProgress(95, 100));
+
         await SendByte(stream, CMD_RUN, token);
         await EnsureOk(stream, token);
+
+        progress?.Report(new OtaProgress(100, 100));
 
         return OtaResult.Success();
     }
 
-    // ================= Helpers =================
+    // ================= PROGRESS ANIMATION =================
+
+    private static async Task AnimateProgressAsync(
+        IProgress<OtaProgress>? progress,
+        int from,
+        int to,
+        int delayMs,
+        CancellationToken token)
+    {
+        for (int i = from; i <= to; i++)
+        {
+            progress?.Report(new OtaProgress(i, 100));
+            await Task.Delay(delayMs, token);
+        }
+    }
+
+    // ================= HELPERS =================
 
     private static async Task SendByte(NetworkStream stream, byte value, CancellationToken token)
-    {
-        var buffer = new byte[] { value };
-        await stream.WriteAsync(buffer, token);
-    }
+        => await stream.WriteAsync(new[] { value }, token);
 
     private static async Task EnsureOk(NetworkStream stream, CancellationToken token)
     {
@@ -242,12 +243,15 @@ public sealed class OtaUpdateService : IOtaUpdateService
         int read = await stream.ReadAsync(buffer, token);
 
         if (read != 1 || buffer[0] != RESP_OK)
-        {
-            var hex = BitConverter.ToString(buffer);
-            var err = (read == 0) ? "No Data / Disconnected" : $"0x{hex}";
-            throw new InvalidOperationException($"Device returned FAIL or Unexpected Data: {err}");
-        }
+            throw new InvalidOperationException("Device returned FAIL or unexpected response.");
     }
+}
+
+public enum OtaPhase
+{
+    Upload,
+    Flashing,
+    Finalizing
 }
 
 public enum OtaTarget
@@ -258,7 +262,7 @@ public enum OtaTarget
 
 public sealed record OtaProgress(long Sent, long Total)
 {
-    public int Percent => (int)((Sent * 60) / Total);
+    public int Percent => (int)((Sent * 100) / Total);
 }
 
 public sealed class OtaResult
