@@ -124,7 +124,7 @@
                     var activeShuttle = _connectedShuttles[ActiveTabIndex];
                     <div class="tab-content">
                         <div class="tab-pane active">
-                            <ShuttleHubControlComponent Shuttle="activeShuttle"
+                            <ShuttleHubControlComponent @key="activeShuttle.IPAddress" Shuttle="activeShuttle"
                                                         OnDisconnected="OnShuttleDisconnected" />
                         </div>
                     </div>
