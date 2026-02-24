@@ -70,49 +70,57 @@ public sealed class OtaUpdateService : IOtaUpdateService
         await client.ConnectAsync(ip, STM_PORT);
         using var stream = client.GetStream();
 
-        // INIT
-        _logger.LogDebug("Sending CMD_INIT");
-        await SendByte(stream, CMD_INIT, token);
-        await EnsureOk(stream, token);
+    await client.ConnectAsync(ip, STM_PORT, token);
+    using var stream = client.GetStream();
 
-        // ERASE
-        await SendByte(stream, CMD_ERASE, token);
-        await EnsureOk(stream, token);
+    _logger.LogDebug("Sending CMD_INIT");
+    stream.ReadTimeout = 2000;
+    await SendByte(stream, CMD_INIT, token);
+    await EnsureOk(stream, token);
 
-        int totalBlocks = (int)Math.Ceiling(fw.Length / 256.0);
-        int offset = 0;
+    _logger.LogDebug("Sending CMD_ERASE (Waiting up to 60s...)");
+    stream.ReadTimeout = 60000;
+    await SendByte(stream, CMD_ERASE, token);
+    await EnsureOk(stream, token);
 
-        for (int i = 0; i < totalBlocks; i++)
-        {
-            token.ThrowIfCancellationRequested();
+    stream.ReadTimeout = 5000;
+    int totalBlocks = (int)Math.Ceiling(fw.Length / 256.0);
+    int offset = 0;
 
-            byte[] block = new byte[256];
-            int len = Math.Min(256, fw.Length - offset);
-            Buffer.BlockCopy(fw, offset, block, 0, len);
+    byte[] packetBuffer = new byte[261];
 
-            uint addr = STM_BASE_ADDRESS + (uint)offset;
-            _logger.LogDebug("Sending CMD_WRITE for block {Block}/{Total}, address 0x{Addr:X8}, size {Size}", i + 1, totalBlocks, addr, len);
-            await SendByte(stream, CMD_WRITE, token);
+    for (int i = 0; i < totalBlocks; i++)
+    {
+        token.ThrowIfCancellationRequested();
 
-            var addrBytes = new byte[4];
-            BinaryPrimitives.WriteUInt32LittleEndian(addrBytes, addr);
-            await stream.WriteAsync(addrBytes, token);
+        packetBuffer[0] = CMD_WRITE;
 
-            await stream.WriteAsync(block, token);
+        uint addr = STM_BASE_ADDRESS + (uint)offset;
+        BinaryPrimitives.WriteUInt32LittleEndian(packetBuffer.AsSpan(1), addr);
 
-            await EnsureOk(stream, token);
+        int len = Math.Min(256, fw.Length - offset);
+        Buffer.BlockCopy(fw, offset, packetBuffer, 5, len);
 
             offset += len;
 
             progress?.Report(new OtaProgress(offset, fw.Length));
         }
-        _logger.LogDebug("Sending CMD_RUN");
-        await SendByte(stream, CMD_RUN, token);
+
+        await stream.WriteAsync(packetBuffer, token);
+
         await EnsureOk(stream, token);
 
-        _logger.LogInformation("STM32 OTA update completed successfully");
-        return OtaResult.Success();
+        offset += len;
+        progress?.Report(new OtaProgress(offset, fw.Length));
     }
+
+    _logger.LogDebug("Sending CMD_RUN");
+    await SendByte(stream, CMD_RUN, token);
+    await EnsureOk(stream, token);
+
+    _logger.LogInformation("STM32 OTA update completed successfully");
+    return OtaResult.Success();
+}
 
     // ================= ESP =================
 
