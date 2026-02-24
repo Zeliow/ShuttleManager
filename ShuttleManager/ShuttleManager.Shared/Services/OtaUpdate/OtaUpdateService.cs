@@ -258,7 +258,7 @@ public enum OtaTarget
 
 public sealed record OtaProgress(long Sent, long Total)
 {
-    public int Percent => (int)((Sent * 60) / Total);
+    public int Percent => (int)((Sent * 100) / Total);
 }
 
 public sealed class OtaResult

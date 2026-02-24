@@ -13,6 +13,7 @@
 @inject IWebBrowserService WebBrowserService
 @inject IFilePickerService FilePickerService
 @inject IOtaUpdateService OtaService
+@implements IAsyncDisposable
 
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -352,9 +353,9 @@
                                         <h6 class="fw-bold text-muted mb-0">Параметры</h6>
                                     </div>
                                     <div class="card-body p-2">
-                                        <button @onclick="ChoiceFile">Select .bin</button>
+                                        @*<button @onclick="ChoiceFile">Select .bin</button>
 
-                                        @* @if (_selectedFile != null)
+                                         @if (_selectedFile != null)
                                         {
                                         <p>@_selectedFile</p>*@
                                         <label for="Erase">full erase STM: </label>
@@ -443,6 +444,7 @@
             {
                 Directory.CreateDirectory($"{AppContext.BaseDirectory}/logs");
             }
+            Logger.LogInformation("+++ Component INIT: Subscribing to events for {IP}", Shuttle.IPAddress);
             HubClientService.Connected += OnHubConnected;
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.LogReceived += OnLogReceived;
@@ -1092,15 +1094,24 @@
         _selectedFile = file?.FilePath;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        Logger.LogInformation("Дисконнект компонента для IP: {IpAddress}", Shuttle.IPAddress);
+        try
+        {
+            Logger.LogInformation("Дисконнект компонента для IP: {IpAddress}", Shuttle?.IPAddress ?? "null");
 
-        _componentCts.Cancel();
-        _componentCts.Dispose();
+            _componentCts?.Cancel();
+            _componentCts?.Dispose();
 
-        HubClientService.Connected -= OnHubConnected;
-        HubClientService.Disconnected -= OnHubDisconnected;
-        HubClientService.LogReceived -= OnLogReceived;
+            Logger.LogInformation("--- Component DISPOSE: Unsubscribing from events for {IP}", Shuttle?.IPAddress ?? "null");
+
+            HubClientService.Connected -= OnHubConnected;
+            HubClientService.Disconnected -= OnHubDisconnected;
+            HubClientService.LogReceived -= OnLogReceived;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при вызове Dispose");
+        }
     }
 }
