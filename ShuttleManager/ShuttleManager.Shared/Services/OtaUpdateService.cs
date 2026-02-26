@@ -1,9 +1,10 @@
 ﻿using Microsoft.Extensions.Logging;
+using ShuttleManager.Shared.Interfaces;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Sockets;
 
-namespace ShuttleManager.Shared.Services.OtaUpdate;
+namespace ShuttleManager.Shared.Services;
 
 public sealed class OtaUpdateService : IOtaUpdateService
 {

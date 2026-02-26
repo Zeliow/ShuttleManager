@@ -1,13 +1,4 @@
-﻿@using System.Diagnostics
-@using ShuttleManager.Shared.Services
-@using ShuttleManager.Shared.Services.FilePicker
-@using ShuttleManager.Shared.Services.OtaUpdate
-@using ShuttleManager.Shared.Services.ShuttleClient
-@using ShuttleManager.Shared.Services.WebBrowser
-@using System.Text.Json.Nodes
-@using ShuttleManager.Shared.Models
-@using Microsoft.Extensions.Logging
-@inject IJSRuntime JSRuntime
+﻿@inject IJSRuntime JSRuntime
 @inject IShuttleHubClientService HubClientService
 @inject ILogger<ShuttleHubControlComponent> Logger
 @inject IWebBrowserService WebBrowserService
@@ -132,11 +123,11 @@
                                 <div class="card-body p-2">
                                     <div class="row g-1">
                                         <div class="col-6">
-                                            <div class="mb-1">
+                                            @* <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaDisplayUpdate" title="OTA Display">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>⚠️display firmware
                                                 </button>
-                                            </div>
+                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>Обновление прошивки экрана (UPD) (Browser)
@@ -149,11 +140,11 @@
                                             </div>
                                         </div>
                                         <div class="col-6">
-                                            <div class="mb-1">
+                                            @* <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaStmUpdate" title="OTA STM">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>⚠️STM firmware
                                                 </button>
-                                            </div>
+                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
                                                     <i class="bi bi-cloud-arrow-up me-1"></i>Обновление прошивки платы (FRM) (Browser)
@@ -401,7 +392,7 @@
     private int MaxSpeedInput = 0;
     private int MinPowerInput = 0;
     private int PallentDistance = 0;
-    private string NameOfFirmware = "";
+    // private string NameOfFirmware = "";
     private bool isAndroid => OperatingSystem.IsAndroid();
 
     private string _terminalOutputHtml = "";
@@ -884,17 +875,17 @@
         IsFullErased = !IsFullErased;
     }
 
-    private async Task OpenOtaDisplayUpdate()
-    {
-        await SendCommandAsync("UPD", "Обновление");
-        await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}/update");
-    }
+    // private async Task OpenOtaDisplayUpdate()
+    // {
+    //     await SendCommandAsync("UPD", "Обновление");
+    //     await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}/update");
+    // }
 
-    private async Task OpenOtaStmUpdate()
-    {
-        await SendCommandAsync("FRM", "Прошивка");
-        await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}");
-    }
+    // private async Task OpenOtaStmUpdate()
+    // {
+    //     await SendCommandAsync("FRM", "Прошивка");
+    //     await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}");
+    // }
 
     private async Task SendStopCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dStop_", "Остановка");
     private async Task SendLoadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLoad_", "Загрузка");
@@ -935,7 +926,7 @@
 
     private async Task SendFRMFirmwareCommand() => await SendUpdateCommandAndOpenBrowser();
     private async Task SendUpdateStateShuttleCommand() => await SendUPDCommandAndOpenBrowser();
-    private async Task SendRebootShuttleCommand() => await SendCommandAsync("RBT", "Reboot shuttle");
+    private async Task SendRebootShuttleCommand() => await SendCommandAsync("RBT", "Перезагрузка шаттла shuttle");
 
     private async Task SendSetShuttleNumCommand()
     {
@@ -947,7 +938,6 @@
     private async Task SendSetMaxSpeedShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dSp{MaxSpeedInput}", $"Установка максимальной скорости: {MaxSpeedInput}%");
     private async Task SendSetMinPowerShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dBc{MinPowerInput}", $"Установка уровня защиты батареи: {MinPowerInput}%");
     private async Task SendSetPalletBetweenDistanceShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dDm{PallentDistance}", $"Установка межпаллетного расстояния: {PallentDistance}%");
-
     private async Task SendSetDistanceOfEdgeShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dMс{DistanceOfEdge}", $"Установка расстояния от края: {DistanceOfEdge} мм");
     private async Task SendSetlenghtOfShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dSl{LenghtOfShuttle}", $"Установка длины шаттла: {LenghtOfShuttle} мм");
 

@@ -1,5 +1,5 @@
 ﻿using Microsoft.Maui.Controls.PlatformConfiguration;
-using ShuttleManager.Shared.Services.WebBrowser;
+using ShuttleManager.Shared.Interfaces;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -7,34 +7,6 @@ namespace ShuttleManager.Services;
 
 public class WebBrowserService : IWebBrowserService
 {
-    public static WebBrowserService Instance { get; private set; } = new WebBrowserService();
-
-    public WebBrowserService()
-    {
-        Instance = this;
-    }
-
-    public async Task OpenWebViewBrowser(string url)
-    {
-        var page = new BrowserPage(url);
-        await MainThread.InvokeOnMainThreadAsync(async () =>
-        {
-            await Application.Current.Windows[0].Page.Navigation.PushModalAsync(page);
-        });
-    }
-
-    public async Task MinimizeBrowser()
-    {
-        await MainThread.InvokeOnMainThreadAsync(async () =>
-        {
-            if (Application.Current?.Windows[0]?.Navigation.ModalStack?.Any() == true)
-            {
-                await Application.Current.Windows[0].Page.Navigation.PopModalAsync(animated: true);
-            }
-        });
-    }
-
-
     public async Task OpenBrowserAsync(Uri uri)
     {
         if (uri == null)
@@ -68,4 +40,3 @@ public class WebBrowserService : IWebBrowserService
         }
     }
 }
-

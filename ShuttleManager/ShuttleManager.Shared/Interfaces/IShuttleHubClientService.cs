@@ -2,8 +2,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
 
-namespace ShuttleManager.Shared.Services.ShuttleClient;
-
+namespace ShuttleManager.Shared.Interfaces;
 
 public class ConnectedShuttleInfo
 {
@@ -18,16 +17,22 @@ public class ConnectedShuttleInfo
 }
 
 public interface IShuttleHubClientService
-{  
+{
     event Action<string, string>? LogReceived;        // Передаёт IP и лог
+
     event Action<string, int>? Connected;              // Передаёт IP и ID шаттла
+
     event Action<string>? Disconnected;                // Передаёт IP
 
-
     public Task ConnectToShuttleAsync(string ipAddress, int port);
+
     void DisconnectFromShuttle(string ipAddress);
+
     public Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs);
+
     List<Shuttle> GetConnectedShuttles();
+
     ConnectedShuttleInfo? GetShuttleInfo(string ipAddress);
+
     public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000);
 }

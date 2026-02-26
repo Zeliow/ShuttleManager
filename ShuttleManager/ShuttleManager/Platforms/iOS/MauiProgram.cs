@@ -4,7 +4,7 @@ using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Services;
 using ShuttleManager.Shared.Services.TcpOfClient;
 
-namespace ShuttleManager.Platforms.Windows;
+namespace ShuttleManager.Platforms.iOS;
 
 public static class MauiProgram
 {

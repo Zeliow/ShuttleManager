@@ -1,5 +1,4 @@
-﻿using ShuttleManager.Shared.Services.FilePicker;
-
+﻿using ShuttleManager.Shared.Interfaces;
 
 namespace ShuttleManager.Services;
 
@@ -7,7 +6,6 @@ public class FilePickerService : IFilePickerService
 {
     public async Task<PickedFileDto?> PickFileAsync()
     {
-
         var options = new PickOptions
         {
             PickerTitle = "Выберите .bin файл",
@@ -21,7 +19,6 @@ public class FilePickerService : IFilePickerService
                     { DevicePlatform.macOS, new[] { ".bin" } }
                 })
         };
-
 
         var result = await FilePicker.Default.PickAsync(options);
         if (result == null) return null;

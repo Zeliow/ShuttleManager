@@ -1,17 +1,19 @@
-﻿using ShuttleManager.Shared.Models;
+﻿using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 
-namespace ShuttleManager.Shared.Services.ShuttleClient
+namespace ShuttleManager.Shared.Services
 {
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     {
         public event Action<string, string>? LogReceived;
+
         public event Action<string, int>? Connected;
+
         public event Action<string>? Disconnected;
+
         private readonly Dictionary<string, ShuttleConnection> _connections = [];
         private readonly object _lock = new();
 
@@ -34,7 +36,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             var foundDevices = new List<IPAddress>();
             var tasks = new List<Task>();
 
-            //перебор подсети 
+            //перебор подсети
             for (int i = startIp; i <= endIp; i++)
             {
                 string ip = $"{baseIp}.{i}";
@@ -99,7 +101,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
         public async Task ConnectToShuttleAsync(string ipAddress, int port)
         {
-            lock (_lock) {}
+            lock (_lock) { }
 
             var connection = new ShuttleConnection { IpAddress = ipAddress };
 
@@ -118,7 +120,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
                 string? handshakeLine = await ReadLineAsync(connection);
                 OnConnected(ipAddress, connection.ShuttleId);
-             
+
                 connection.ReceiveCts = new CancellationTokenSource();
                 connection.ReceiveTask = Task.Run(async () => await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
 
@@ -218,6 +220,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
             Debug.WriteLine($"[ShuttleHubClientService] ReceiveLoop завершён для {connection.IpAddress}");
         }
+
         public async Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs = 1000)
         {
             ShuttleConnection? connection;
@@ -297,7 +300,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
         }
 
-
         public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
 
         private async Task InternalDisconnectAsync(string ipAddress)
@@ -331,7 +333,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     _connections.Remove(ipAddress);
                 }
             }
-
 
             if (connectionToDispose != null)
             {
@@ -367,11 +368,11 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 _connections.Clear();
             }
         }
-   
+
         private void OnConnected(string ip, int id) => Connected?.Invoke(ip, id);
+
         private void OnDisconnected(string ip) => Disconnected?.Invoke(ip);
+
         private void OnLogReceived(string ip, string log) => LogReceived?.Invoke(ip, log);
     }
-
-     
 }

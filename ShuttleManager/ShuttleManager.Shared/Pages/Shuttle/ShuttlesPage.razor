@@ -1,26 +1,18 @@
 ﻿@page "/"
-@using System.Diagnostics
-@using System.Net
-@using ShuttleManager.Shared.Services.ShuttleClient
 @inject IJSRuntime JSRuntime
-@using ShuttleManager.Shared.Services
 @inject IShuttleHubClientService HubClientService
-@using ShuttleManager.Shared.Models
 
 <PageTitle>Панель управления шаттлами</PageTitle>
 
 <div class="container-fluid">
-    <div class="header-app" style="padding-bottom:5px;">
-        <h5 style="display:inline; margin-right: 5px; ">Панель управления шаттлами</h5>
-        <label>dark mode: </label>
-        <input class="form-check-input" type="checkbox" id="themeToggle" @ref="toggleElement" checked="@IsDarkMode" @onchange="OnDarkModeChanged" role="switch" />
-    </div>
 
     <div class="row">
         <div class="col-md-3">
             <div class="card mb-3">
                 <div class="card-header">
-                    <h6 style="margin-bottom:0px;">Сканирование сети</h6>
+                    <h6 style="margin-bottom:0px; display: inline;">Сканирование сети</h6>
+                    <label>[dark mode: </label>
+                    <input class="form-check-input" type="checkbox" id="themeToggle" @ref="toggleElement" checked="@IsDarkMode" @onchange="OnDarkModeChanged" role="switch" />]
                 </div>
                 <div class="card-body">
                     <div class="row mb-1">
