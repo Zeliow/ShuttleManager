@@ -34,9 +34,10 @@
 		</ApplicationIcon>
 	</PropertyGroup>
 
+	
 	<!-- Windows: build only, framework-dependent -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
-		<PublishSingleFile>false</PublishSingleFile>
+		<PublishSingleFile>true</PublishSingleFile>
 		<SelfContained>false</SelfContained>
 		<RuntimeIdentifier></RuntimeIdentifier>
 		<WindowsPackageType>None</WindowsPackageType>
