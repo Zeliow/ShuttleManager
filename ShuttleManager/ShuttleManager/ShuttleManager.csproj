@@ -1,7 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+
 	<PropertyGroup>
-		<TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+		<TargetFrameworks>
+			net10.0-android;
+		</TargetFrameworks>
+
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">
+			$(TargetFrameworks);net10.0-windows10.0.19041.0
+		</TargetFrameworks>
 
 		<OutputType>Exe</OutputType>
 		<RootNamespace>ShuttleManager</RootNamespace>
@@ -11,54 +17,45 @@
 		<EnableDefaultCssItems>false</EnableDefaultCssItems>
 		<Nullable>enable</Nullable>
 
-		<ApplicationTitle>[MICRON] Менеджер шаттлов S.V2</ApplicationTitle>
-		<ApplicationId>shuttlemanager</ApplicationId>
-		<ApplicationDisplayVersion>2.0</ApplicationDisplayVersion>
-		<ApplicationVersion>2</ApplicationVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+			24.0
+		</SupportedOSPlatformVersion>
 
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
-		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+			10.0.17763.0
+		</SupportedOSPlatformVersion>
 
-		<ApplicationIcon>Resources\AppIcon\appicon.ico</ApplicationIcon>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+			10.0.17763.0
+		</TargetPlatformMinVersion>
+
+		<ApplicationIcon>
+			Resources\AppIcon\appicon.ico
+		</ApplicationIcon>
 	</PropertyGroup>
 
+	<!-- Windows: build only, framework-dependent -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
-		<SingleProjectMsix>false</SingleProjectMsix>
-		<PublishSingleFile>true</PublishSingleFile>	
-		<!-- test container (self) in not work - delete-->
-		<SelfContained>true</SelfContained>
-		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
-		<PublishReadyToRun>true</PublishReadyToRun>
+		<PublishSingleFile>false</PublishSingleFile>
+		<SelfContained>false</SelfContained>
+		<RuntimeIdentifier></RuntimeIdentifier>
 		<WindowsPackageType>None</WindowsPackageType>
 	</PropertyGroup>
-
 
 	<ItemGroup>
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" />
 		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
 		<MauiImage Include="Resources\Images\*" />
-		<MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
 		<MauiFont Include="Resources\Fonts\*" />
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
-	</ItemGroup>
-
-
-	<ItemGroup>
-	  <AndroidResource Remove="Platforms\Windows\Services\**" />
-	  <Compile Remove="Platforms\Windows\Services\**" />
-	  <Content Remove="Platforms\Windows\Services\**" />
-	  <EmbeddedResource Remove="Platforms\Windows\Services\**" />
-	  <MauiXaml Remove="Platforms\Windows\Services\**" />
-	  <None Remove="Platforms\Windows\Services\**" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 	</ItemGroup>
 
@@ -66,15 +63,4 @@
 		<ProjectReference Include="..\ShuttleManager.Shared\ShuttleManager.Shared.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Compile Update="Platforms\iOS\MauiProgram.cs">
-	    <ExcludeFromCurrentConfiguration>false</ExcludeFromCurrentConfiguration>
-	  </Compile>
-	  <Compile Update="Platforms\MacCatalyst\MauiProgram.cs">
-	    <ExcludeFromCurrentConfiguration>false</ExcludeFromCurrentConfiguration>
-	  </Compile>
-	  <Compile Update="Platforms\Windows\MauiProgram.cs">
-	    <ExcludeFromCurrentConfiguration>false</ExcludeFromCurrentConfiguration>
-	  </Compile>
-	</ItemGroup>
 </Project>
