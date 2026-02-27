@@ -249,7 +249,7 @@
 
     private async Task DisconnectShuttle(string ipAddress)
     {
-        HubClientService.DisconnectFromShuttle(ipAddress);
+        await HubClientService.DisconnectFromShuttleAsync(ipAddress);
         Debug.WriteLine($"[INFO] Запрошено отключение от {ipAddress}\n");
     }
 

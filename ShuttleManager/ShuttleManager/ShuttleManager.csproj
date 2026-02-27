@@ -17,6 +17,9 @@
 		<EnableDefaultCssItems>false</EnableDefaultCssItems>
 		<Nullable>enable</Nullable>
 
+		<!-- .NET 10 Optimization: Performance and size flags -->
+		<OptimizationPreference>Speed</OptimizationPreference>
+
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
 			24.0
 		</SupportedOSPlatformVersion>

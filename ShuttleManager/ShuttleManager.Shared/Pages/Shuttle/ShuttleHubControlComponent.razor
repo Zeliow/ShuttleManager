@@ -986,7 +986,7 @@
         }
         else
         {
-            HubClientService.DisconnectFromShuttle(Shuttle.IPAddress);
+            await HubClientService.DisconnectFromShuttleAsync(Shuttle.IPAddress);
             LogToTerminal("[INFO] Запрошено отключение\n");
             await OnDisconnected.InvokeAsync(Shuttle.IPAddress);
         }
