@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="ShuttleManager/.editorconfig" />
+    <File Path="ShuttleManager/Directory.Build.props" />
+  </Folder>
   <Project Path="ShuttleManager/ShuttleManager.Shared/ShuttleManager.Shared.csproj" />
   <Project Path="ShuttleManager/ShuttleManager/ShuttleManager.csproj">
     <Deploy />
