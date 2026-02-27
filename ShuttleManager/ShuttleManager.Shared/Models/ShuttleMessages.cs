@@ -13,7 +13,7 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[TELEMETRY] Pos: {Data.CurrentPosition}mm, Spd: {Data.Speed}%, V: {Data.BatteryVoltage:F1}V, Batt: {Data.BatteryCharge}%";
+            return $"[TELEMETRY] Pos: {Data.CurrentPosition}mm, Spd: {Data.Speed}%, V: {Data.BatteryVoltage_mV / 1000.0:F1}V, Batt: {Data.BatteryCharge}%";
         }
     }
 
@@ -23,7 +23,7 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[SENSORS] DistF: {Data.DistanceF}mm, DistR: {Data.DistanceR}mm, Temp: {Data.Temperature:F1}C";
+            return $"[SENSORS] DistF: {Data.DistanceF}mm, DistR: {Data.DistanceR}mm, Temp: {Data.Temperature_dC / 10.0:F1}C";
         }
     }
 
