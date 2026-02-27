@@ -149,7 +149,6 @@ namespace ShuttleManager.Shared.Services
 
             while (true)
             {
-                // Bolt Optimization: Avoid ToArray() in loop to reduce GC pressure
                 byte[] currentBuffer = connection.ReceiveBuffer.GetBuffer();
                 int currentLength = (int)connection.ReceiveBuffer.Length;
                 int newlineIndex = Array.IndexOf(currentBuffer, (byte)'\n', 0, currentLength);
