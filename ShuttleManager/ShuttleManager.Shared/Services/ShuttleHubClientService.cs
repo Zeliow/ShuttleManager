@@ -1,8 +1,8 @@
-﻿using ShuttleManager.Shared.Interfaces;
-using ShuttleManager.Shared.Models;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models;
 
 namespace ShuttleManager.Shared.Services
 {
@@ -20,14 +20,23 @@ namespace ShuttleManager.Shared.Services
         private class ShuttleConnection
         {
             public TcpClient? TcpClient { get; set; }
+
             public Stream? NetworkStream { get; set; }
+
             public StreamReader? Reader { get; set; }
+
             public StreamWriter? Writer { get; set; }
+
             public CancellationTokenSource? ReceiveCts { get; set; }
+
             public bool IsStartStream { get; set; } = false;
+
             public Task? ReceiveTask { get; set; }
+
             public int ShuttleId { get; set; } = -1;
+
             public string IpAddress { get; set; } = string.Empty;
+
             public readonly MemoryStream ReceiveBuffer = new();
         }
 
@@ -52,15 +61,21 @@ namespace ShuttleManager.Shared.Services
                             if (client.Connected)
                             {
                                 Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                                lock (foundDevices) foundDevices.Add(IPAddress.Parse(ip));
+                                lock (foundDevices)
+                                    foundDevices.Add(IPAddress.Parse(ip));
                             }
                         }
-                        catch (OperationCanceledException) { }
+                        catch (OperationCanceledException)
+                        {
+                        }
                     }
-                    catch (SocketException) { }
+                    catch (SocketException)
+                    {
+                    }
                 });
                 tasks.Add(task);
             }
+
             await Task.WhenAll(tasks);
             return foundDevices;
         }
@@ -70,7 +85,7 @@ namespace ShuttleManager.Shared.Services
             lock (_lock)
             {
                 var infos = new List<Shuttle>();
-                foreach (var kvp in _connections)
+                foreach (KeyValuePair<string, ShuttleConnection> kvp in _connections)
                 {
                     infos.Add(new Shuttle
                     {
@@ -78,6 +93,7 @@ namespace ShuttleManager.Shared.Services
                         IsConnected = kvp.Value.TcpClient?.Connected == true,
                     });
                 }
+
                 return infos;
             }
         }
@@ -92,16 +108,19 @@ namespace ShuttleManager.Shared.Services
                     {
                         IpAddress = conn.IpAddress,
                         IsConnected = conn.TcpClient?.Connected == true,
-                        ShuttleId = conn.ShuttleId
+                        ShuttleId = conn.ShuttleId,
                     };
                 }
             }
+
             return null;
         }
 
         public async Task ConnectToShuttleAsync(string ipAddress, int port)
         {
-            lock (_lock) { }
+            lock (_lock)
+            {
+            }
 
             var connection = new ShuttleConnection { IpAddress = ipAddress };
 
@@ -136,6 +155,45 @@ namespace ShuttleManager.Shared.Services
             }
         }
 
+        public async Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs = 1000)
+        {
+            ShuttleConnection? connection;
+            lock (_lock)
+            {
+                if (!_connections.TryGetValue(ipAddress, out var conn))
+                {
+                    Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync: Нет активного соединения для {ipAddress}.");
+                    return false;
+                }
+
+                connection = conn;
+            }
+
+            return await SendCommandInternalAsync(connection, command, timeoutMs);
+        }
+
+        public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
+
+        public void Dispose()
+        {
+            lock (_lock)
+            {
+                foreach (var kvp in _connections)
+                {
+                    var conn = kvp.Value;
+                    conn.ReceiveCts?.Cancel();
+                    conn.ReceiveCts?.Dispose();
+                    conn.Writer?.Dispose();
+                    conn.Reader?.Dispose();
+                    conn.NetworkStream?.Dispose();
+                    conn.TcpClient?.Close();
+                    conn.TcpClient?.Dispose();
+                }
+
+                _connections.Clear();
+            }
+        }
+
         private async Task<string?> ReadLineAsync(ShuttleConnection connection, CancellationToken cancellationToken = default)
         {
             if (!connection.IsStartStream)
@@ -163,6 +221,7 @@ namespace ShuttleManager.Shared.Services
                     {
                         Buffer.BlockCopy(currentBuffer, newlineIndex + 1, currentBuffer, 0, remaining);
                     }
+
                     connection.ReceiveBuffer.SetLength(remaining);
                     connection.ReceiveBuffer.Position = remaining;
 
@@ -171,6 +230,7 @@ namespace ShuttleManager.Shared.Services
 
                     return line;
                 }
+
                 int bytesRead = await connection.NetworkStream!.ReadAsync(readBuffer, 0, readBuffer.Length, cancellationToken);
                 if (bytesRead == 0)
                 {
@@ -211,6 +271,7 @@ namespace ShuttleManager.Shared.Services
                         await InternalDisconnectAsync(connection.IpAddress);
                         break;
                     }
+
                     OnLogReceived(connection.IpAddress, line);
                 }
                 catch (OperationCanceledException)
@@ -225,22 +286,8 @@ namespace ShuttleManager.Shared.Services
                     break;
                 }
             }
-            Debug.WriteLine($"[ShuttleHubClientService] ReceiveLoop завершён для {connection.IpAddress}");
-        }
 
-        public async Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs = 1000)
-        {
-            ShuttleConnection? connection;
-            lock (_lock)
-            {
-                if (!_connections.TryGetValue(ipAddress, out var conn))
-                {
-                    Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync: Нет активного соединения для {ipAddress}.");
-                    return false;
-                }
-                connection = conn;
-            }
-            return await SendCommandInternalAsync(connection, command, timeoutMs);
+            Debug.WriteLine($"[ShuttleHubClientService] ReceiveLoop завершён для {connection.IpAddress}");
         }
 
         private async Task<bool> SendCommandInternalAsync(ShuttleConnection connection, string command, int timeoutMs)
@@ -307,8 +354,6 @@ namespace ShuttleManager.Shared.Services
             }
         }
 
-        public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
-
         private async Task InternalDisconnectAsync(string ipAddress)
         {
             ShuttleConnection? connectionToDispose = null;
@@ -353,26 +398,8 @@ namespace ShuttleManager.Shared.Services
                     {
                     }
                 }
-                OnDisconnected(ipAddress);
-            }
-        }
 
-        public void Dispose()
-        {
-            lock (_lock)
-            {
-                foreach (var kvp in _connections)
-                {
-                    var conn = kvp.Value;
-                    conn.ReceiveCts?.Cancel();
-                    conn.ReceiveCts?.Dispose();
-                    conn.Writer?.Dispose();
-                    conn.Reader?.Dispose();
-                    conn.NetworkStream?.Dispose();
-                    conn.TcpClient?.Close();
-                    conn.TcpClient?.Dispose();
-                }
-                _connections.Clear();
+                OnDisconnected(ipAddress);
             }
         }
 

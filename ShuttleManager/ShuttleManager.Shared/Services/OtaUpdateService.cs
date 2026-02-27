@@ -8,10 +8,6 @@ namespace ShuttleManager.Shared.Services;
 
 public sealed class OtaUpdateService : IOtaUpdateService
 {
-    private readonly ILogger<OtaUpdateService> _logger;
-
-    public OtaUpdateService(ILogger<OtaUpdateService> logger) => _logger = logger;
-
     private const byte CMD_INIT = 0x01;
     private const byte CMD_ERASE = 0x02;
     private const byte CMD_WRITE = 0x03;
@@ -25,6 +21,10 @@ public sealed class OtaUpdateService : IOtaUpdateService
     private const int ESP_PORT = 8081;
 
     private const uint STM_BASE_ADDRESS = 0x08000000;
+
+    private readonly ILogger<OtaUpdateService> _logger;
+
+    public OtaUpdateService(ILogger<OtaUpdateService> logger) => _logger = logger;
 
     public async Task<OtaResult> RunAsync(
         string ip,
@@ -230,7 +230,6 @@ public sealed class OtaUpdateService : IOtaUpdateService
     }
 
     // ================= Helpers =================
-
     private static async Task SendByte(NetworkStream stream, byte value, CancellationToken token)
     {
         var buffer = new byte[] { value };
@@ -253,8 +252,15 @@ public sealed class OtaUpdateService : IOtaUpdateService
 
 public enum OtaTarget
 {
+    /// <summary>
+    /// STM-32
+    /// </summary>
     Stm32,
-    Esp32
+
+    /// <summary>
+    /// ESP-32
+    /// </summary>
+    Esp32,
 }
 
 public sealed record OtaProgress(long Sent, long Total)
@@ -265,6 +271,7 @@ public sealed record OtaProgress(long Sent, long Total)
 public sealed class OtaResult
 {
     public bool IsSuccess { get; }
+
     public string? Error { get; }
 
     private OtaResult(bool success, string? error)

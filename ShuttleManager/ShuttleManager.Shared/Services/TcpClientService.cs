@@ -1,6 +1,6 @@
-﻿using ShuttleManager.Shared.Services.TcpOfClient;
-using System.Buffers;
+﻿using System.Buffers;
 using System.Net.Sockets;
+using ShuttleManager.Shared.Services.TcpOfClient;
 
 namespace ShuttleManager.Shared.Services;
 
@@ -61,8 +61,14 @@ public class TcpClientService : ITcpClientService
             string? line = await reader.ReadLineAsync(cancellationToken);
             return line;
         }
-        catch (OperationCanceledException) { return null; }
-        catch (IOException) { return null; }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     public void Disconnect()

@@ -262,9 +262,14 @@ dotnet_diagnostic.SA1101.severity = none
 dotnet_diagnostic.SA1633.severity = none
 dotnet_diagnostic.SA1201.severity = none
 dotnet_diagnostic.SA1005.severity = none
+dotnet_diagnostic.SA1310.severity = none
+
+# another platform include off analyzers
+dotnet_code_quality.enable_platform_analyzer_on_pre_net5_target = false
+dotnet_diagnostic.CA1416.severity = none
 
 # Отключаем или меняем уровень серьезности предупреждения SA1310, чтобы не конфликтовало с новыми правилами.
-dotnet_diagnostic.SA1310.severity = none
+dotnet_diagnostic.SA1310.Interoperability = none
 
 # Определяем символы для публичных констант
 dotnet_naming_symbols.public_constants.applicable_kinds = field
