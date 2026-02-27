@@ -15,8 +15,8 @@
             </span>
         </h5>
         <div>
-            <button class="btn btn-sm btn-danger" @onclick="DisconnectThis" title="Отключиться">
-                <i class="bi bi-power"></i> Закрыть
+            <button class="btn btn-sm btn-danger d-flex align-items-center" @onclick="DisconnectThis" title="Отключиться" aria-label="Отключиться от шаттла">
+                <i class="bi bi-power me-1" aria-hidden="true"></i> Закрыть
             </button>
         </div>
     </div>
@@ -40,7 +40,8 @@
                 <div class="row">
                     <div class="col-md-3">
                         <label class="form-label small text-muted">Батарея:</label>
-                        <p id="batteryData_@ComponentId" class="fw-bold @GetBatteryColorClass()">
+                        <p id="batteryData_@ComponentId" class="fw-bold @GetBatteryColorClass() d-flex align-items-center" title="Заряд батареи">
+                            <i class="@GetBatteryIconClass() me-2" aria-hidden="true"></i>
                             @BatteryData
                         </p>
                     </div>
@@ -68,8 +69,8 @@
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label>Терминал: </label>
                                     <div style="height: 100%">
-                                        <button class="btn btn-sm btn-outline-danger me-1" @onclick="ClearTerminal" title="Очистить терминал">
-                                            <i class="bi bi-trash">❌</i>
+                                        <button class="btn btn-sm btn-outline-danger me-1" @onclick="ClearTerminal" title="Очистить терминал" aria-label="Очистить терминал">
+                                            <i class="bi bi-trash" aria-hidden="true"></i>
                                         </button>
                                         <span class="badge bg-secondary">@Shuttle.GetTerminalMessages().Count строк</span>
                                     </div>
@@ -90,9 +91,10 @@
                                                placeholder="Введите команду..."
                                                @onkeypress="HandleKeyPress"
                                                disabled="@(!IsConnected || _isCommandInProgress)" />
-                                    <button class="btn btn-primary btn-sm"
-                                            @onclick="SendManualCommand">
-                                        <i class="bi bi-send"></i> Отпр
+                                    <button class="btn btn-primary btn-sm d-flex align-items-center"
+                                            @onclick="SendManualCommand"
+                                            aria-label="Отправить команду">
+                                        <i class="bi bi-send me-1" aria-hidden="true"></i> Отпр
                                     </button>
                                 </div>
                             </div>
@@ -411,7 +413,7 @@
     private int BatteryPercentageValue => Shuttle.BatteryPercentage;
     private string LastActivityTime => Shuttle.LastActivity.ToString("HH:mm:ss");
     private string Uptime => (DateTime.Now - Shuttle.ConnectionTime).ToString(@"hh\:mm\:ss");
-    private string BatteryData => $"Батарея: {Shuttle.BatteryVoltage:F1}V | Заряд: {Shuttle.BatteryPercentage}%";
+    private string BatteryData => $"{Shuttle.BatteryVoltage:F1}V | {Shuttle.BatteryPercentage}%";
     private bool IsConnected => Shuttle.IsConnected;
     private string ComponentId => _componentId;
     private string ManualCommand { get => _manualCommand; set => _manualCommand = value; }
@@ -1057,6 +1059,14 @@
         >= 70 => "text-success",
         >= 30 => "text-warning",
         _ => "text-danger"
+    };
+
+    private string GetBatteryIconClass() => BatteryPercentageValue switch
+    {
+        >= 80 => "bi bi-battery-full",
+        >= 50 => "bi bi-battery-half",
+        >= 20 => "bi bi-battery-low",
+        _ => "bi bi-battery"
     };
 
     private string GetBatteryProgressClass() => BatteryPercentageValue switch
