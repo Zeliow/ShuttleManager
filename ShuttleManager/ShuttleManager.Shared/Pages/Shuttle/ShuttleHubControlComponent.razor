@@ -64,22 +64,23 @@
                 <div class="row">
                     <div class="col-md-7">
                         <div class="card mb-2">
-                            <div class="card-body p-2" style="height: 100%">
+                            <div class="card-body p-2">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label>Терминал: </label>
-                                    <div style="height: 100%">
+                                    <div>
                                         <button class="btn btn-sm btn-outline-danger me-1" @onclick="ClearTerminal" title="Очистить терминал">
                                             <b class="bi bi-trash">❌</b>
                                         </button>
-                                        <span class="badge bg-secondary">@Shuttle.GetTerminalMessages().Count строк</span>
+                                        <span class="badge bg-secondary">@Shuttle.TerminalMessageCount строк</span>
                                     </div>
                                 </div>
                                 <div id="terminalContainer_@ComponentId"
                                      class="terminal-container border rounded"
-                                     style="height: 448px;">
-                                    <Microsoft.AspNetCore.Components.Web.Virtualization.Virtualize Items="Shuttle.GetTerminalMessages()" Context="line">
+                                     style="max-height: 400px;">
+                                    @foreach (var line in Shuttle.GetTerminalMessages())
+                                    {
                                         <div class="terminal-line">@line</div>
-                                    </Microsoft.AspNetCore.Components.Web.Virtualization.Virtualize>
+                                    }
                                 </div>
                                 <div class="input-group input-group-sm mt-2">
                                     <span class="input-group-text">
@@ -125,11 +126,6 @@
                                 <div class="card-body p-2">
                                     <div class="row g-1">
                                         <div class="col-6">
-                                            @* <div class="mb-1">
-                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaDisplayUpdate" title="OTA Display">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>⚠️display firmware
-                                                </button>
-                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
                                                     <i class="bi bi-arrow-clockwise me-1">Обновление прошивки экрана (UPD) (Browser)</i>
@@ -142,11 +138,6 @@
                                             </div>
                                         </div>
                                         <div class="col-6">
-                                            @* <div class="mb-1">
-                                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenOtaStmUpdate" title="OTA STM">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>⚠️STM firmware
-                                                </button>
-                                            </div> *@
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
                                                     <i class="bi bi-cloud-arrow-up me-1">Обновление прошивки платы (FRM) (Browser)</i>
@@ -394,7 +385,6 @@
     private int MaxSpeedInput = 0;
     private int MinPowerInput = 0;
     private int PallentDistance = 0;
-    // private string NameOfFirmware = "";
     private bool isAndroid => OperatingSystem.IsAndroid();
 
     private string _manualCommand = "";
@@ -875,18 +865,6 @@
         IsFullErased = !IsFullErased;
     }
 
-    // private async Task OpenOtaDisplayUpdate()
-    // {
-    //     await SendCommandAsync("UPD", "Обновление");
-    //     await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}/update");
-    // }
-
-    // private async Task OpenOtaStmUpdate()
-    // {
-    //     await SendCommandAsync("FRM", "Прошивка");
-    //     await WebBrowserService.OpenWebViewBrowser($"http://{Shuttle.IPAddress}");
-    // }
-
     private async Task SendStopCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dStop_", "Остановка");
     private async Task SendLoadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLoad_", "Загрузка");
     private async Task SendLargeLoadCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dLLoad", "Длительная загрузка");
@@ -915,7 +893,10 @@
             await SendCommandAsync($"{Shuttle.ShuttleNumber}dRevOn", "Реверс режим on");
         }
         else
-        { await SendCommandAsync($"{Shuttle.ShuttleNumber}dReOff", "Реверс режим off"); isReversed = false; }
+        {
+            await SendCommandAsync($"{Shuttle.ShuttleNumber}dReOff", "Реверс режим off");
+            isReversed = false;
+        }
 
     }
 
@@ -1022,7 +1003,7 @@
     {
         Shuttle.AddTerminalMessage(message);
 
-        if (Shuttle.GetTerminalMessages().Count > 1000)
+        if (Shuttle.TerminalMessageCount > 900)
         {
             Shuttle.RemoveTerminalMessage();
         }
