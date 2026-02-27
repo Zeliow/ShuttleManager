@@ -16,7 +16,7 @@ public class ConnectedShuttleInfo
     public int WarningCode { get; set; } = -1;
 }
 
-public interface IShuttleHubClientService
+public interface IShuttleHubClientService : IAsyncDisposable
 {
     event Action<string, string>? LogReceived;        // Передаёт IP и лог
 
@@ -24,15 +24,15 @@ public interface IShuttleHubClientService
 
     event Action<string>? Disconnected;                // Передаёт IP
 
-    public Task ConnectToShuttleAsync(string ipAddress, int port);
+    ValueTask ConnectToShuttleAsync(string ipAddress, int port, CancellationToken cancellationToken = default);
 
-    void DisconnectFromShuttle(string ipAddress);
+    ValueTask DisconnectFromShuttleAsync(string ipAddress);
 
-    public Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs);
+    ValueTask<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs, CancellationToken cancellationToken = default);
 
     List<Shuttle> GetConnectedShuttles();
 
     ConnectedShuttleInfo? GetShuttleInfo(string ipAddress);
 
-    public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000);
+    Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000, CancellationToken cancellationToken = default);
 }
