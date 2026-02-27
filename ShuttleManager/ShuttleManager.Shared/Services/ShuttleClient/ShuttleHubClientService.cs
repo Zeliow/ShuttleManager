@@ -181,11 +181,11 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             while (offset < data.Length)
             {
-                // 1. Look for Sync (0xAA 0x55)
+                // 1. Look for Sync (0xBB 0xCC)
                 int syncIndex = -1;
                 for (int i = offset; i < data.Length - 1; i++)
                 {
-                    if (data[i] == 0xAA && data[i + 1] == 0x55)
+                    if (data[i] == 0xBB && data[i + 1] == 0xCC)
                     {
                         syncIndex = i;
                         break;
@@ -208,8 +208,11 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     }
 
                     // Read Header
-                    // Sync1(1), Sync2(1), Length(2), Seq(1), MsgID(1)
-                    ushort payloadLength = BinaryPrimitives.ReadUInt16LittleEndian(new ReadOnlySpan<byte>(data, syncIndex + 2, 2));
+                    // Sync1(1), Sync2(1), MsgID(1), TargetID(1), Seq(1), Length(1)
+                    byte msgId = data[syncIndex + 2];
+                    byte targetId = data[syncIndex + 3];
+                    byte seq = data[syncIndex + 4];
+                    byte payloadLength = data[syncIndex + 5];
 
                     int totalFrameSize = 6 + payloadLength + 2; // Header + Payload + CRC
 
@@ -228,8 +231,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     if (receivedCrc == calculatedCrc)
                     {
                         // Valid Frame
-                        byte seq = data[syncIndex + 4];
-                        byte msgId = data[syncIndex + 5];
                         var payload = new ReadOnlySpan<byte>(data, syncIndex + 6, payloadLength);
 
                         HandleBinaryMessage(connection, (MsgID)msgId, payload, seq);
@@ -309,6 +310,44 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                         var text = Encoding.UTF8.GetString(payload.Slice(1));
                         message = new RawLogMessage { Level = level, Text = text };
                     }
+                    break;
+
+                case MsgID.MSG_REQ_HEARTBEAT:
+                case MsgID.MSG_REQ_SENSORS:
+                case MsgID.MSG_REQ_STATS:
+                    // These are request messages, may not need specific handling
+                    break;
+
+                case MsgID.MSG_CONFIG_SYNC_REQ:
+                case MsgID.MSG_CONFIG_SYNC_PUSH:
+                case MsgID.MSG_CONFIG_SYNC_REP:
+                    if (payload.Length >= Marshal.SizeOf<FullConfigPacket>())
+                        message = new ConfigMessage { Data = MemoryMarshal.Read<FullConfigPacket>(payload) };
+                    break;
+
+                case MsgID.MSG_CMD_SIMPLE:
+                    if (payload.Length >= Marshal.SizeOf<SimpleCmdPacket>())
+                    {
+                        var cmdPacket = MemoryMarshal.Read<SimpleCmdPacket>(payload);
+                        // Create a fake AckPacket to pass the command type in the message
+                        var fakeAck = new AckPacket { RefSeq = 0, Result = cmdPacket.CmdType }; // Reuse Result field to pass cmd type
+                        message = new AckMessage { Data = fakeAck };
+                    }
+                    break;
+
+                case MsgID.MSG_CMD_WITH_ARG:
+                    if (payload.Length >= Marshal.SizeOf<ParamCmdPacket>())
+                    {
+                        var cmdPacket = MemoryMarshal.Read<ParamCmdPacket>(payload);
+                        // Create a fake AckPacket to pass the command type and arg in the message
+                        var fakeAck = new AckPacket { RefSeq = (byte)cmdPacket.Arg, Result = cmdPacket.CmdType }; // Reuse fields to pass cmd info
+                        message = new AckMessage { Data = fakeAck };
+                    }
+                    break;
+
+                case MsgID.MSG_SET_DATETIME:
+                    if (payload.Length >= Marshal.SizeOf<DateTimePacket>())
+                        message = new AckMessage { Data = MemoryMarshal.Read<DateTimePacket>(payload) };
                     break;
 
                 case MsgID.MSG_CONFIG_SET:
@@ -393,26 +432,76 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             byte seq = connection.NextSeq++;
 
-            var cmdPacket = new CommandPacket
+            // Determine if command needs arguments or not
+            // Commands that don't need arguments use MSG_CMD_SIMPLE with SimpleCmdPacket
+            // Commands that need arguments use MSG_CMD_WITH_ARG with ParamCmdPacket
+            MsgID msgId;
+            int payloadSize;
+            int frameSize;
+            byte[] frame;
+
+            if (arg1 == 0 && arg2 == 0 && (
+                cmd == CmdType.CMD_STOP ||
+                cmd == CmdType.CMD_LIFT_UP ||
+                cmd == CmdType.CMD_LIFT_DOWN ||
+                cmd == CmdType.CMD_LOAD ||
+                cmd == CmdType.CMD_UNLOAD ||
+                cmd == CmdType.CMD_DEMO ||
+                cmd == CmdType.CMD_CALIBRATE ||
+                cmd == CmdType.CMD_COUNT_PALLETS ||
+                cmd == CmdType.CMD_SAVE_EEPROM ||
+                cmd == CmdType.CMD_COMPACT_F ||
+                cmd == CmdType.CMD_COMPACT_R ||
+                cmd == CmdType.CMD_HOME ||
+                cmd == CmdType.CMD_RESET_ERROR ||
+                cmd == CmdType.CMD_SYSTEM_RESET ||
+                cmd == CmdType.CMD_FIRMWARE_UPDATE))
             {
-                CmdType = (byte)cmd,
-                Arg1 = arg1,
-                Arg2 = arg2
-            };
+                // Use simple command (1 byte payload)
+                var simpleCmdPacket = new SimpleCmdPacket
+                {
+                    CmdType = (byte)cmd
+                };
 
-            int payloadSize = Marshal.SizeOf(cmdPacket);
-            int frameSize = 6 + payloadSize + 2;
-            byte[] frame = new byte[frameSize];
+                payloadSize = Marshal.SizeOf(simpleCmdPacket);
+                frameSize = 6 + payloadSize + 2;
+                frame = new byte[frameSize];
 
-            // Header
-            frame[0] = 0xAA;
-            frame[1] = 0x55;
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
-            frame[4] = seq;
-            frame[5] = (byte)MsgID.MSG_COMMAND;
+                // Header
+                frame[0] = 0xBB;
+                frame[1] = 0xCC;
+                frame[2] = (byte)MsgID.MSG_CMD_SIMPLE;
+                frame[3] = 0x00; // TargetID
+                frame[4] = seq;
+                frame[5] = (byte)payloadSize; // Length field for header
 
-            // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cmdPacket);
+                // Payload
+                MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref simpleCmdPacket);
+            }
+            else
+            {
+                // Use command with argument (5 bytes payload: 4 bytes arg + 1 byte cmd type)
+                var paramCmdPacket = new ParamCmdPacket
+                {
+                    CmdType = (byte)cmd,
+                    Arg = arg1  // Using arg1 as the main argument, ignoring arg2 for now as per spec
+                };
+
+                payloadSize = Marshal.SizeOf(paramCmdPacket);
+                frameSize = 6 + payloadSize + 2;
+                frame = new byte[frameSize];
+
+                // Header
+                frame[0] = 0xBB;
+                frame[1] = 0xCC;
+                frame[2] = (byte)MsgID.MSG_CMD_WITH_ARG;
+                frame[3] = 0x00; // TargetID
+                frame[4] = seq;
+                frame[5] = (byte)payloadSize; // Length field for header
+
+                // Payload
+                MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref paramCmdPacket);
+            }
 
             // CRC
             ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
@@ -470,11 +559,12 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             byte[] frame = new byte[frameSize];
 
             // Header
-            frame[0] = 0xAA;
-            frame[1] = 0x55;
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
+            frame[0] = 0xBB;
+            frame[1] = 0xCC;
+            frame[2] = (byte)MsgID.MSG_CONFIG_SET;
+            frame[3] = 0x00; // TargetID
             frame[4] = seq;
-            frame[5] = (byte)MsgID.MSG_CONFIG_SET;
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(5, 2), (ushort)payloadSize);
 
             // Payload
             MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cfgPacket);
