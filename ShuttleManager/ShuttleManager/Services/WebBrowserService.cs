@@ -1,5 +1,4 @@
-﻿using Microsoft.Maui.Controls.PlatformConfiguration;
-using ShuttleManager.Shared.Interfaces;
+﻿using ShuttleManager.Shared.Interfaces;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 

@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 namespace ShuttleManager.Shared.Services.TcpOfClient;
+
 public interface ITcpClientService
 {
     public Task<bool> ConnectAsync(string host, int port);

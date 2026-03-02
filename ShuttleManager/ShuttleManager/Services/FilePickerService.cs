@@ -21,7 +21,8 @@ public class FilePickerService : IFilePickerService
         };
 
         var result = await FilePicker.Default.PickAsync(options);
-        if (result == null) return null;
+        if (result == null)
+            return null;
 
         return new PickedFileDto
         {

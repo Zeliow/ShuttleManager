@@ -1,13 +1,16 @@
-# ѕуть к exe
-$exePath = "$PSScriptRoot\bin\Release\net10.0-windows10.0.19041.0\win-x64\ShuttleManager.exe"
+# ѕапка с exe (win-x64)
+$exeDir = Join-Path $PSScriptRoot "bin\Release\net10.0-windows10.0.19041.0\win-x64"
+$exePath = Join-Path $exeDir "ShuttleManager.exe"
 
-# ѕуть дл€ €рлыка (р€дом с папкой win-x64)
-$shortcutPath = "$PSScriptRoot\bin\Release\net10.0-windows10.0.19041.0\ShuttleManager.lnk"
+# ѕапка, где будет €рлык (р€дом с win-x64)
+$shortcutDir = Split-Path $exeDir -Parent
+$shortcutPath = Join-Path $shortcutDir "ShuttleManager.lnk"
 
+# —оздание €рлыка
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($shortcutPath)
 $Shortcut.TargetPath = $exePath
-$Shortcut.WorkingDirectory = Split-Path $exePath
+$Shortcut.WorkingDirectory = $exeDir
 $Shortcut.Save()
 
 Write-Host "ярлык создан: $shortcutPath"

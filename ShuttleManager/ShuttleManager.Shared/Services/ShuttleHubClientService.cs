@@ -1,8 +1,8 @@
-﻿using System.Diagnostics;
+﻿using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using ShuttleManager.Shared.Interfaces;
-using ShuttleManager.Shared.Models;
 
 namespace ShuttleManager.Shared.Services
 {

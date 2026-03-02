@@ -1,6 +1,6 @@
-﻿using System.Buffers;
+﻿using ShuttleManager.Shared.Services.TcpOfClient;
+using System.Buffers;
 using System.Net.Sockets;
-using ShuttleManager.Shared.Services.TcpOfClient;
 
 namespace ShuttleManager.Shared.Services;
 
@@ -27,14 +27,16 @@ public class TcpClientService : ITcpClientService
 
     public async Task SendAsync(ReadOnlyMemory<byte> data)
     {
-        if (_networkStream == null) throw new InvalidOperationException("Not connected");
+        if (_networkStream == null)
+            throw new InvalidOperationException("Not connected");
         await _networkStream.WriteAsync(data);
         await _networkStream.FlushAsync();
     }
 
     public async Task<ReadOnlySequence<byte>> ReceiveAsync(int length)
     {
-        if (_networkStream == null) throw new InvalidOperationException("Not connected");
+        if (_networkStream == null)
+            throw new InvalidOperationException("Not connected");
 
         var buffer = new byte[length];
         int totalRead = 0;
@@ -52,7 +54,8 @@ public class TcpClientService : ITcpClientService
 
     public async Task<string?> ReceiveStringAsync(CancellationToken cancellationToken)
     {
-        if (_networkStream == null) throw new InvalidOperationException("Not connected");
+        if (_networkStream == null)
+            throw new InvalidOperationException("Not connected");
 
         using var reader = new StreamReader(_networkStream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
 

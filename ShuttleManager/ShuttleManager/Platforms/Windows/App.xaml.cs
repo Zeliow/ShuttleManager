@@ -1,7 +1,6 @@
 ﻿using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using ShuttleManager.Platforms.Windows;
-using System.Diagnostics;
 using WinRT.Interop;
 
 // To learn more about WinUI, the WinUI project structure,
