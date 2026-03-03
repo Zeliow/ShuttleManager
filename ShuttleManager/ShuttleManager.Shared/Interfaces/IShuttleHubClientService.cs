@@ -31,5 +31,5 @@ public interface IShuttleHubClientService
 
     List<Shuttle> GetConnectedShuttles();
 
-    public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000);
+    public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000);
 }

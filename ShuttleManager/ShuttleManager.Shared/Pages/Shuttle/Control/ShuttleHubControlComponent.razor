@@ -159,11 +159,6 @@
                                     <h6 class="fw-bold text-muted mb-0">Обновление</h6>
                                 </div>
                                 <div class="card-body p-2">
-                                    @*<button @onclick="ChoiceFile">Select .bin</button>
-
-                                         @if (_selectedFile != null)
-                                        {
-                                        <p>@_selectedFile</p>*@
                                     <label for="Erase">full erase STM: </label>
                                     <input type="checkbox" id="IsArase" name="Erase" checked="@IsFullErased" @onchange="OnAraseModeChanged" />
                                     <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
@@ -173,7 +168,6 @@
                                     <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">
                                         Update ESP
                                     </button>
-                                    @*  } *@
 
                                     @if (_isOtaRunning)
                                     {

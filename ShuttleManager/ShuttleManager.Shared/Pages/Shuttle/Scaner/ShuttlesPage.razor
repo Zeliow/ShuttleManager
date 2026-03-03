@@ -3,8 +3,6 @@
 @inject IShuttleHubClientService HubClientService
 @implements IAsyncDisposable
 
-<PageTitle>Панель управления шаттлами</PageTitle>
-
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-3">
@@ -34,8 +32,8 @@
                     @if (IsScanning)
                     {
                         <div class="alert alert-info">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            Поиск на @(BaseIp).@(StartRange)-@(EndRange):@(Port)...
+                            <div class="spinner-border spinner-border-sm " role="status"></div>
+                            Поиск ...
                         </div>
                     }
                     @if (FoundDevices.Any())
@@ -62,29 +60,6 @@
                     }
                 </div>
             </div>
-
-            @* @if (_connectedShuttles.Any())
-            {
-                <div class="card">
-                    <div class="card-header">
-                        <h6 style="margin-bottom:0px;">Подключенные устройства</h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-group list-group-flush">
-                            @foreach (var shuttle in _connectedShuttles)
-                            {
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>(@shuttle.IPAddress)</span>
-                                    <button class="btn btn-sm btn-danger"
-                                            @onclick="() => DisconnectShuttle(shuttle.IPAddress!)">
-                                        <i class="bi bi-power"></i>
-                                    </button>
-                                </li>
-                            }
-                        </ul>
-                    </div>
-                </div>
-            } *@
         </div>
 
         <div class="col-md-9">
@@ -136,8 +111,6 @@
 @code {
     private string BaseIp = "192.168.40";
     private int Port = 23;
-    private int StartRange = 130;
-    private int EndRange = 196;
     private bool IsScanning = false;
     private bool ScanCompleted = false;
     private List<IPAddress> FoundDevices = new();
@@ -232,7 +205,7 @@
 
         try
         {
-            FoundDevices = await HubClientService.ScanNetworkAsync(BaseIp, StartRange, EndRange, Port, 1000);
+            FoundDevices = await HubClientService.ScanNetworkAsync(BaseIp, Port, 1000);
         }
         catch (Exception ex)
         {
@@ -245,12 +218,6 @@
             ScanCompleted = true;
             StateHasChanged();
         }
-    }
-
-    private async Task DisconnectShuttle(string ipAddress)
-    {
-        HubClientService.DisconnectFromShuttle(ipAddress);
-        Debug.WriteLine($"[INFO] Запрошено отключение от {ipAddress}\n");
     }
 
     private void OnShuttleConnected(string ipAddress, int shuttleId)

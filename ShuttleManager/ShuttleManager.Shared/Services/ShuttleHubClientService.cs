@@ -40,13 +40,16 @@ namespace ShuttleManager.Shared.Services
             public readonly MemoryStream ReceiveBuffer = new();
         }
 
-        public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000)
+        private int _startRange = 130;
+        private int _endRange = 196;
+
+        public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
         {
             var foundDevices = new List<IPAddress>();
             var tasks = new List<Task>();
 
             //перебор подсети
-            for (int i = startIp; i <= endIp; i++)
+            for (int i = _startRange; i <= _endRange; i++)
             {
                 string ip = $"{baseIp}.{i}";
                 var task = Task.Run(async () =>
