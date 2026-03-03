@@ -944,12 +944,16 @@
         {
             await SendCommandAsync($"{Shuttle.ShuttleNumber}dMс{DistanceOfEdge}", $"Установка расстояния от края: {DistanceOfEdge} мм");
         }
-
     }
 
     private async Task SendSetlenghtOfShuttleCommand()
     {
-        await SendCommandAsync($"{Shuttle.ShuttleNumber}dSl{LenghtOfShuttle}", $"Установка длины шаттла: {LenghtOfShuttle} мм");
+        if (LenghtOfShuttle == 800)
+        {
+            string resultOfLenghtofShuttle = "0" + Convert.ToString(LenghtOfShuttle / 10);
+            await SendCommandAsync($"{Shuttle.ShuttleNumber}dSl{resultOfLenghtofShuttle}", $"Установка длины шаттла: {LenghtOfShuttle} мм");
+        }
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dSl{LenghtOfShuttle / 10}", $"Установка длины шаттла: {LenghtOfShuttle} мм");
     }
 
     private async Task SetTime()

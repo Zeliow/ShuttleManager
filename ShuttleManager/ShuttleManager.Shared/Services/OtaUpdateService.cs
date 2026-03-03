@@ -6,13 +6,35 @@ using ShuttleManager.Shared.Interfaces;
 
 namespace ShuttleManager.Shared.Services;
 
+/* * =========================================================================
+ * OTA ROBUST PROTOCOL DEVELOPER PLAN
+ * =========================================================================
+ * * OVERVIEW:
+ * We transitioned from a continuous "Stream and Pray" mechanism to a robust
+ * chunk-by-chunk acknowledgment protocol (CMD_WRITE_CHUNK = 0x06).
+ * This handles noise, EMI, and temporary network stutters explicitly.
+ * * DEVELOPER TASKS & CHECKS:
+ * 1. Network Drops: The code below retries the *chunk* if the ESP returns
+ * 0xFF (Fail) or if a ReadTimeout occurs. HOWEVER, if the socket fully
+ * disconnects (throws SocketException), the current code will bubble it up.
+ * If hard disconnects are common, wrap the inner `for` loop with a new
+ * TcpClient initialization block that resumes from the same `offset`.
+ * * 2. Magic Numbers: We use a 4096 (4KB) chunk size. This balances network
+ * efficiency with error-correction speed. If network drops are severe,
+ * you can reduce this to 1024.
+ * * 3. Timeout Rules:
+ * - STM Erase takes up to 45 seconds. Keep ReadTimeout >= 60000.
+ * - Chunk upload has a 10-second timeout.
+ * =========================================================================
+ */
+
 public sealed class OtaUpdateService : IOtaUpdateService
 {
     private const byte CMD_INIT = 0x01;
     private const byte CMD_ERASE = 0x02;
-    private const byte CMD_WRITE = 0x03;
     private const byte CMD_RUN = 0x04;
     private const byte CMD_WRITE_STREAM = 0x05;
+    private const byte CMD_WRITE_CHUNK = 0x06; // NEW ROBUST COMMAND
 
     private const byte RESP_OK = 0xAA;
     private const byte RESP_FAIL = 0xFF;
@@ -21,6 +43,11 @@ public sealed class OtaUpdateService : IOtaUpdateService
     private const int ESP_PORT = 8081;
 
     private const uint STM_BASE_ADDRESS = 0x08000000;
+
+    // Aligned for fast TCP transfers but manageable for retries
+    private const int CHUNK_SIZE = 4096;
+
+    private const int MAX_RETRIES = 5;
 
     private readonly ILogger<OtaUpdateService> _logger;
 
@@ -45,7 +72,7 @@ public sealed class OtaUpdateService : IOtaUpdateService
 
         try
         {
-            _logger.LogInformation("Initiating OTA Update for {Target} on {Ip}. File size: {Size} bytes. Full Erase: {FullErase}", target, ip, firmware.Length, fullErase);
+            _logger.LogInformation("Initiating Robust OTA Update for {Target} on {Ip}. File size: {Size} bytes. Full Erase: {FullErase}", target, ip, firmware.Length, fullErase);
 
             var result = target == OtaTarget.Stm32
                 ? await RunStmAsync(ip, firmware, progress, token, fullErase)
@@ -75,13 +102,12 @@ public sealed class OtaUpdateService : IOtaUpdateService
     }
 
     // ================= STM =================
-
     private async Task<OtaResult> RunStmAsync(
-    string ip,
-    byte[] fw,
-    IProgress<OtaProgress>? progress,
-    CancellationToken token,
-    bool fullErase)
+        string ip,
+        byte[] fw,
+        IProgress<OtaProgress>? progress,
+        CancellationToken token,
+        bool fullErase)
     {
         using var client = new TcpClient();
         client.NoDelay = true;
@@ -101,28 +127,16 @@ public sealed class OtaUpdateService : IOtaUpdateService
         // 2. ERASE
         string eraseMode = fullErase ? "MASS ERASE (Deleting Config)" : "Smart Erase (Preserving Config)";
         _logger.LogInformation("[STM] Sending CMD_ERASE ({Mode} - This may take 30-45s)...", eraseMode);
-        stream.ReadTimeout = 60000;
+        stream.ReadTimeout = 60000; // Important: Erase takes a long time
 
         await SendByte(stream, CMD_ERASE, token);
-        // Send Erase Mode Byte: 0x01 = Full, 0x00 = Smart
         await SendByte(stream, fullErase ? (byte)0x01 : (byte)0x00, token);
-
         await EnsureOk(stream, token);
         _logger.LogInformation("[STM] Flash Erased.");
 
-        // 3. STREAM WRITE
-        _logger.LogInformation("[STM] Starting Firmware Stream (Fast Mode)...");
-        await SendByte(stream, CMD_WRITE_STREAM, token);
+        // 3. CHUNKED WRITE WITH RETRIES
+        _logger.LogInformation("[STM] Starting Chunked Firmware Upload (Robust Mode) ...");
 
-        var header = new byte[8];
-        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(0), STM_BASE_ADDRESS);
-        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), (uint)fw.Length);
-        await stream.WriteAsync(header, token);
-
-        stream.ReadTimeout = 5000;
-        await EnsureOk(stream, token);
-
-        const int progressChunkSize = 8192;
         int offset = 0;
         int lastLogPercent = 0;
 
@@ -130,27 +144,55 @@ public sealed class OtaUpdateService : IOtaUpdateService
         {
             token.ThrowIfCancellationRequested();
 
-            int len = Math.Min(progressChunkSize, fw.Length - offset);
-            await stream.WriteAsync(fw.AsMemory(offset, len), token);
+            int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
+            bool chunkSuccess = false;
 
-            offset += len;
-            progress?.Report(new OtaProgress(offset, fw.Length));
-
-            int percent = (int)((offset * 100) / fw.Length);
-            if (percent - lastLogPercent >= 20) // Log every 20%
+            for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
             {
-                _logger.LogInformation("[STM] Uploading... {Percent}%", percent);
-                lastLogPercent = percent;
+                try
+                {
+                    stream.ReadTimeout = 10000; // 10 sec per chunk
+
+                    // Build Chunk Header: [CMD 1B] [OFFSET 4B] [LEN 2B]
+                    var header = new byte[7];
+                    header[0] = CMD_WRITE_CHUNK;
+                    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), STM_BASE_ADDRESS + (uint)offset);
+                    BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
+
+                    await stream.WriteAsync(header, token);
+                    await stream.WriteAsync(fw.AsMemory(offset, len), token);
+
+                    await EnsureOk(stream, token);
+
+                    chunkSuccess = true;
+                    break; // Success, break out of retry loop
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("[STM] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
+                    if (attempt == MAX_RETRIES)
+                        return OtaResult.Fail($"Failed at offset {offset}");
+                    await Task.Delay(500, token); // Brief pause before retry
+                }
+            }
+
+            if (chunkSuccess)
+            {
+                offset += len;
+                progress?.Report(new OtaProgress(offset, fw.Length));
+
+                int percent = (int)((offset * 100) / fw.Length);
+                if (percent - lastLogPercent >= 10) // Log every 10%
+                {
+                    _logger.LogInformation("[STM] Uploading... {Percent}%", percent);
+                    lastLogPercent = percent;
+                }
             }
         }
 
-        // 4. WAIT FOR COMPLETION
-        _logger.LogInformation("[STM] Upload complete. Waiting for device processing & verification...");
-        stream.ReadTimeout = 45000;
-        await EnsureOk(stream, token);
-
-        // 5. RUN
-        _logger.LogInformation("[STM] Sending CMD_RUN (Rebooting target)...");
+        // 4. RUN
+        _logger.LogInformation("[STM] Upload complete. Sending CMD_RUN (Rebooting target)...");
+        stream.ReadTimeout = 10000;
         await SendByte(stream, CMD_RUN, token);
         await EnsureOk(stream, token);
 
@@ -158,7 +200,6 @@ public sealed class OtaUpdateService : IOtaUpdateService
     }
 
     // ================= ESP =================
-
     private async Task<OtaResult> RunEspAsync(
         string ip,
         byte[] fw,
@@ -181,20 +222,11 @@ public sealed class OtaUpdateService : IOtaUpdateService
         var sizeBytes = new byte[4];
         BinaryPrimitives.WriteUInt32LittleEndian(sizeBytes, (uint)fw.Length);
         await stream.WriteAsync(sizeBytes, token);
-
         await EnsureOk(stream, token);
 
-        // 2. STREAM COMMAND
-        _logger.LogInformation("[ESP] Sending CMD_WRITE_STREAM (Turbo Mode)...");
-        await SendByte(stream, CMD_WRITE_STREAM, token);
+        // 2. CHUNKED WRITE WITH RETRIES
+        _logger.LogInformation("[ESP] Starting Chunked Firmware Upload (Robust Mode)...");
 
-        await stream.WriteAsync(sizeBytes, token);
-        await EnsureOk(stream, token);
-
-        // 3. STREAM DATA
-        _logger.LogInformation("[ESP] Streaming Firmware...");
-
-        const int progressChunkSize = 8192;
         int offset = 0;
         int lastLogPercent = 0;
 
@@ -202,27 +234,54 @@ public sealed class OtaUpdateService : IOtaUpdateService
         {
             token.ThrowIfCancellationRequested();
 
-            int len = Math.Min(progressChunkSize, fw.Length - offset);
-            await stream.WriteAsync(fw.AsMemory(offset, len), token);
+            int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
+            bool chunkSuccess = false;
 
-            offset += len;
-            progress?.Report(new OtaProgress(offset, fw.Length));
-
-            int percent = (int)((offset * 100) / fw.Length);
-            if (percent - lastLogPercent >= 20)
+            for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
             {
-                _logger.LogInformation("[ESP] Uploading... {Percent}%", percent);
-                lastLogPercent = percent;
+                try
+                {
+                    stream.ReadTimeout = 10000;
+
+                    var header = new byte[7];
+                    header[0] = CMD_WRITE_CHUNK;
+                    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), (uint)offset);
+                    BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
+
+                    await stream.WriteAsync(header, token);
+                    await stream.WriteAsync(fw.AsMemory(offset, len), token);
+
+                    await EnsureOk(stream, token);
+
+                    chunkSuccess = true;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("[ESP] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
+                    if (attempt == MAX_RETRIES)
+                        return OtaResult.Fail($"Failed at offset {offset}");
+                    await Task.Delay(500, token);
+                }
+            }
+
+            if (chunkSuccess)
+            {
+                offset += len;
+                progress?.Report(new OtaProgress(offset, fw.Length));
+
+                int percent = (int)((offset * 100) / fw.Length);
+                if (percent - lastLogPercent >= 10)
+                {
+                    _logger.LogInformation("[ESP] Uploading... {Percent}%", percent);
+                    lastLogPercent = percent;
+                }
             }
         }
 
-        // 4. WAIT FOR COMPLETION
-        _logger.LogInformation("[ESP] Upload complete. Waiting for flash finish...");
-        stream.ReadTimeout = 30000;
-        await EnsureOk(stream, token);
-
-        // 5. RUN
-        _logger.LogInformation("[ESP] Sending CMD_RUN (Finalizing & Restarting)...");
+        // 3. RUN
+        _logger.LogInformation("[ESP] Upload complete. Sending CMD_RUN (Finalizing & Restarting)...");
+        stream.ReadTimeout = 15000;
         await SendByte(stream, CMD_RUN, token);
         await EnsureOk(stream, token);
 
