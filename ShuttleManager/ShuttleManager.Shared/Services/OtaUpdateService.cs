@@ -33,6 +33,7 @@ public sealed class OtaUpdateService : IOtaUpdateService
     private const byte CMD_INIT = 0x01;
     private const byte CMD_ERASE = 0x02;
     private const byte CMD_RUN = 0x04;
+    private const byte CMD_WRITE_STREAM = 0x05;
     private const byte CMD_WRITE_CHUNK = 0x06; // NEW ROBUST COMMAND
 
     private const byte RESP_OK = 0xAA;
