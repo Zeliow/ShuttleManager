@@ -135,7 +135,7 @@ public sealed class OtaUpdateService : IOtaUpdateService
         _logger.LogInformation("[STM] Flash Erased.");
 
         // 3. CHUNKED WRITE WITH RETRIES
-        _logger.LogInformation("[STM] Starting Chunked Firmware Upload (Robust Mode)...");
+        _logger.LogInformation("[STM] Starting Chunked Firmware Upload (Robust Mode) ...");
 
         int offset = 0;
         int lastLogPercent = 0;
