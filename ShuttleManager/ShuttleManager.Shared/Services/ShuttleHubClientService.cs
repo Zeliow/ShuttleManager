@@ -1,8 +1,8 @@
-﻿using ShuttleManager.Shared.Interfaces;
-using ShuttleManager.Shared.Models;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models;
 
 namespace ShuttleManager.Shared.Services
 {
@@ -96,24 +96,6 @@ namespace ShuttleManager.Shared.Services
 
                 return infos;
             }
-        }
-
-        public ConnectedShuttleInfo? GetShuttleInfo(string ipAddress)
-        {
-            lock (_lock)
-            {
-                if (_connections.TryGetValue(ipAddress, out var conn))
-                {
-                    return new ConnectedShuttleInfo
-                    {
-                        IpAddress = conn.IpAddress,
-                        IsConnected = conn.TcpClient?.Connected == true,
-                        ShuttleId = conn.ShuttleId,
-                    };
-                }
-            }
-
-            return null;
         }
 
         public async Task ConnectToShuttleAsync(string ipAddress, int port)

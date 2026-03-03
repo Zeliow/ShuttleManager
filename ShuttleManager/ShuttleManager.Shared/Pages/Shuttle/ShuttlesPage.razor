@@ -1,6 +1,7 @@
 ﻿@page "/"
 @inject IJSRuntime JSRuntime
 @inject IShuttleHubClientService HubClientService
+@implements IAsyncDisposable
 
 <PageTitle>Панель управления шаттлами</PageTitle>
 
@@ -62,7 +63,7 @@
                 </div>
             </div>
 
-            @if (_connectedShuttles.Any())
+            @* @if (_connectedShuttles.Any())
             {
                 <div class="card">
                     <div class="card-header">
@@ -76,14 +77,14 @@
                                     <span>(@shuttle.IPAddress)</span>
                                     <button class="btn btn-sm btn-danger"
                                             @onclick="() => DisconnectShuttle(shuttle.IPAddress!)">
-                                        <i class="bi bi-power">Отключить</i>
+                                        <i class="bi bi-power"></i>
                                     </button>
                                 </li>
                             }
                         </ul>
                     </div>
                 </div>
-            }
+            } *@
         </div>
 
         <div class="col-md-9">
@@ -315,7 +316,7 @@
 
     private bool IsAlreadyConnected(string ipAddress) => _connectedShuttles.Any(s => s.IPAddress == ipAddress);
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         HubClientService.Connected -= OnShuttleConnected;
         HubClientService.Disconnected -= OnShuttleDisconnected;

@@ -13,18 +13,12 @@ namespace ShuttleManager.WinUI
     /// </summary>
     public partial class App : MauiWinUIApplication
     {
-        /// <summary>
-        /// Initializes the singleton application object.  This is the first line of authored code
-        /// executed, and as such is the logical equivalent of main() or WinMain().
-        /// </summary>
         public App()
         {
-            // Попытка перехватить необработанные исключения
             AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
             {
                 var exception = args.ExceptionObject as Exception;
                 Console.WriteLine($"[CRITICAL] Unhandled Exception: {exception?.Message}");
-                // Здесь можно записать ошибку в файл или отправить в аналитику
             };
 
             this.InitializeComponent();
@@ -36,10 +30,10 @@ namespace ShuttleManager.WinUI
         {
             base.OnLaunched(args);
 
-            var window = (Application.Windows.FirstOrDefault() as Microsoft.Maui.Controls.Window);
+            var window = Application.Windows.FirstOrDefault() as Microsoft.Maui.Controls.Window;
             if (window != null)
             {
-                window.Title = "Менеджер шаттлов S.V.3.1";
+                window.Title = "Менеджер шаттлов S.V.3.5";
 
                 var nativeWindow = window.Handler.PlatformView as Microsoft.UI.Xaml.Window;
                 if (nativeWindow != null)

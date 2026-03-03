@@ -1,6 +1,6 @@
-﻿using ShuttleManager.Shared.Interfaces;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
+using ShuttleManager.Shared.Interfaces;
 
 namespace ShuttleManager.Services;
 
@@ -13,6 +13,7 @@ public class WebBrowserService : IWebBrowserService
             Console.WriteLine("[DesktopBrowserLauncherService] URI is null.");
             return;
         }
+
         string url = uri.ToString();
         try
         {

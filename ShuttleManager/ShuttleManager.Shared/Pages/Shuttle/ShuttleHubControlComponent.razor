@@ -69,7 +69,7 @@
                                     <label>Терминал: </label>
                                     <div>
                                         <button class="btn btn-sm btn-outline-danger me-1" @onclick="ClearTerminal" title="Очистить терминал">
-                                            <b class="bi bi-trash">❌</b>
+                                            <b class="bi bi-trash"></b>
                                         </button>
                                         <span class="badge bg-secondary">@Shuttle.TerminalMessageCount строк</span>
                                     </div>
@@ -93,7 +93,7 @@
                                                disabled="@(!IsConnected || _isCommandInProgress)" />
                                     <button class="btn btn-primary btn-sm"
                                             @onclick="SendManualCommand">
-                                        <i class="bi bi-send">Отпр</i>
+                                        <i>Отпр</i>
                                     </button>
                                 </div>
                             </div>
@@ -104,17 +104,17 @@
                                     <div class="row g-1">
                                         <div class="col-6 mb-1">
                                             <button class="btn btn-danger btn-sm w-100" @onclick="SendResetCommand" title="Сброс текущих ошибок">
-                                                <i class="bi bi-arrow-counterclockwise me-1">Сброс ошибок</i>
+                                                <b>Сброс ошибок</b>
                                             </button>
                                         </div>
                                         <div class="col-6 mb-1">
                                             <button class="btn btn-secondary btn-sm w-100" @onclick="SendCalibrateCommand" title="Запуск процедуры калибровки">
-                                                <i class="bi bi-rulers me-1">Калибровка</i>
+                                                <b>Калибровка</b>
                                             </button>
                                         </div>
                                         <div class="col-12">
                                             <button class="btn btn-danger btn-sm w-100 " @onclick="SendRebootShuttleCommand" title="Полная перезагрузка шаттла">
-                                                <i class="bi bi-arrow-repeat me-1">Перезагрузка</i>
+                                                <b class="bi bi-arrow-repeat me-1"></b>
                                             </button>
                                         </div>
                                     </div>
@@ -128,28 +128,61 @@
                                         <div class="col-6">
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
-                                                    <i class="bi bi-arrow-clockwise me-1">Обновление прошивки экрана (UPD) (Browser)</i>
+                                                    <b class="bi bi-cloud-arrow-up me-1">Обновление прошивки экрана (UPD) (Browser)</b>
                                                 </button>
                                             </div>
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SetTime" title="Установить время">
-                                                    <i class="bi bi-arrow-clockwise me-1">Установить время</i>
+                                                    <b>Установить время</b>
                                                 </button>
                                             </div>
                                         </div>
                                         <div class="col-6">
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
-                                                    <i class="bi bi-cloud-arrow-up me-1">Обновление прошивки платы (FRM) (Browser)</i>
+                                                    <b class="bi bi-cloud-arrow-up me-1">Обновление прошивки платы (FRM) (Browser)</b>
                                                 </button>
                                             </div>
                                             <div class="mb-1">
                                                 <button class="btn btn-outline-primary btn-sm w-100" @onclick="OpenLogsShuttle" title="Открыть логи шаттла" disabled="@(OperatingSystem.IsAndroid())">
-                                                    <i class="bi bi-arrow-clockwise me-1">Логи шаттла</i>
+                                                    <b>Логи шаттла</b>
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header p-1">
+                                    <h6 class="fw-bold text-muted mb-0">Обновление</h6>
+                                </div>
+                                <div class="card-body p-2">
+                                    @*<button @onclick="ChoiceFile">Select .bin</button>
+
+                                         @if (_selectedFile != null)
+                                        {
+                                        <p>@_selectedFile</p>*@
+                                    <label for="Erase">full erase STM: </label>
+                                    <input type="checkbox" id="IsArase" name="Erase" checked="@IsFullErased" @onchange="OnAraseModeChanged" />
+                                    <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
+                                        Update STM
+                                    </button>
+
+                                    <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">
+                                        Update ESP
+                                    </button>
+                                    @*  } *@
+
+                                    @if (_isOtaRunning)
+                                    {
+                                        <progress value="@_otaPercent" max="100"></progress>
+                                        <p>@_otaPercent %</p>
+                                        <button @onclick="CancelOta">Cancel</button>
+                                    }
+
+                                    <p>@_otaStatus</p>
                                 </div>
                             </div>
                         </div>
@@ -165,33 +198,33 @@
                                     <div class="card-body p-2">
                                         <div class="row g-1">
                                             <div class="col-6 mb-1">
-                                                <button class="btn btn-success btn-sm w-100" @onclick="SendLoadCommand" title="Запуск цикла загрузки">
-                                                    <i class="bi bi-upload me-1">Загрузка ↗</i>
+                                                <button class="btn btn-primary btn-sm w-100" @onclick="SendLoadCommand" title="Запуск цикла загрузки">
+                                                    Загрузка ↗
                                                 </button>
                                             </div>
                                             <div class="col-6 mb-1">
-                                                <button class="btn btn-success btn-sm w-100" @onclick="SendLargeLoadCommand" title="Запуск продолжительного цикла загрузки">
-                                                    <i class="bi bi-upload me-1">П. Загрузка ↗↗</i>
+                                                <button class="btn btn-primary btn-sm w-100" @onclick="SendLargeLoadCommand" title="Запуск продолжительного цикла загрузки">
+                                                    П. Загрузка ↗↗
                                                 </button>
                                             </div>
                                             <div class="col-6 mb-1">
-                                                <button class="btn btn-warning btn-sm w-100" @onclick="SendUnloadCommand" title="Запуск цикла выгрузки">
-                                                    <i class="bi bi-download me-1">Выгрузка ↘</i>
+                                                <button class="btn btn-primary btn-sm w-100" @onclick="SendUnloadCommand" title="Запуск цикла выгрузки">
+                                                    Выгрузка ↘
                                                 </button>
                                             </div>
                                             <div class="col-6 mb-1">
-                                                <button class="btn btn-warning btn-sm w-100" @onclick="SendLargeUnloadCommand" title="Запуск продолжительного цикла выгрузки">
-                                                    <i class="bi bi-download me-1">П. Выгрузка ↘↘</i>
+                                                <button class="btn btn-primary btn-sm w-100" @onclick="SendLargeUnloadCommand" title="Запуск продолжительного цикла выгрузки">
+                                                    П. Выгрузка ↘↘
                                                 </button>
                                             </div>
                                             <div class="col-6 mb-1">
-                                                <button class="btn btn-success btn-sm w-100" @onclick="SendSealingForwardShuttleCommand" title="Уплотнение вперед">
-                                                    <i class="bi bi-arrows-angle-contract me-1">Уплотнение вперёд</i>
+                                                <button class="btn btn-primary btn-sm w-100" @onclick="SendSealingForwardShuttleCommand" title="Уплотнение вперед">
+                                                    Уплотнение вперёд
                                                 </button>
                                             </div>
                                             <div class="col-6 mb-1">
-                                                <button class="btn btn-warning btn-sm w-100" @onclick="SendSealingBackShuttleCommand" title="Уплотнение назад">
-                                                    <i class="bi bi-arrows-angle-expand me-1">Уплотнение назад</i>
+                                                <button class="btn btn-primary btn-sm w-100" @onclick="SendSealingBackShuttleCommand" title="Уплотнение назад">
+                                                    Уплотнение назад
                                                 </button>
                                             </div>
                                         </div>
@@ -207,43 +240,58 @@
                                     <div class="card-body p-2">
                                         <div class="row g-1">
                                             <div class="col-4 mb-1">
-                                                <button class="btn btn-info btn-sm w-100 p-2" @onclick="SendDemoCommand" title="Запуск демонстрационного режима">
-                                                    <i class="bi bi-play-circle me-1">Демо-режим</i>
+                                                <button class="btn btn-primary btn-sm w-100 p-2 d-flex flex-column align-items-center"
+                                                        @onclick="SendDemoCommand"
+                                                        title="Запуск демонстрационного режима">
+                                                    <i class="bi bi-play-circle me-1"></i>
+                                                    <b>Демо-режим</b>
                                                 </button>
                                             </div>
                                             <div class="col-4 mb-1">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendUpShuttleCommand" title="Движение вперёд">
-                                                    <i class="bi bi-arrow-up-square me-1">↑ вверх ↑</i>
+                                                <button class="btn btn-light btn-sm w-100 p-2 d-flex flex-column align-items-center"
+                                                        @onclick="SendRightShuttleCommand"
+                                                        title="Движение вперёд">
+                                                    <i class="bi bi-arrow-up me-1 text-danger"></i>
+                                                    <b>вперёд</b>
                                                 </button>
                                             </div>
                                             <div class="col-4 mb-1">
-                                                <button class="btn btn-warning btn-sm w-100 p-2"
-                                                        style="background-color: @(isReversed ? "green" : "red");"
+                                                <button class="btn btn-sm w-100 p-2 d-flex flex-column align-items-center  @(isReversed ? "btn-success" : "btn-danger")"
                                                         @onclick="SendReverseShuttleCommand"
                                                         title="Реверс">
-                                                    <i class="bi bi-download me-1"></i>Реверс 🔄
+                                                    <b>🔄</b>
+                                                    <b>Реверс</b>
                                                 </button>
                                             </div>
-
-                                            <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendLeftShuttleCommand" title="Движение влево">
-                                                    <i class="bi bi-arrow-left-square me-1">← назад ←</i>
+                                            <div class="col-4 mb-1">
+                                                <button class="btn btn-light btn-sm w-100 p-2 d-flex flex-column align-items-center"
+                                                        @onclick="SendDownShuttleCommand"
+                                                        title="Движение вниз">
+                                                    <b>вниз</b>
+                                                    <i class="bi bi-arrow-left me-1 mb-1 text-danger"></i>
                                                 </button>
                                             </div>
-                                            <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendDownShuttleCommand" title="Движение назад">
-                                                    <i class="bi bi-arrow-down-square me-1">↓ вниз ↓</i>
+                                            <div class="col-4 mb-1">
+                                                <button class="btn btn-light btn-sm w-100 p-2 d-flex flex-column align-items-center"
+                                                        @onclick="SendLeftShuttleCommand"
+                                                        title="Движение назад">
+                                                    <b>назад</b>
+                                                    <i class="bi bi-arrow-down me-1 mb-1 text-danger"></i>
                                                 </button>
                                             </div>
-                                            <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendRightShuttleCommand" title="Движение вправо">
-                                                    <i class="bi bi-arrow-right-square me-1">→ вперёд →</i>
+                                            <div class="col-4 mb-1">
+                                                <button class="btn btn-light btn-sm w-100 p-2 d-flex flex-column align-items-center"
+                                                        @onclick="SendUpShuttleCommand"
+                                                        title="Движение вверх">
+                                                    <b>вверх</b>
+                                                    <i class="bi bi-arrow-right me-1 mb-1 text-danger"></i>
                                                 </button>
                                             </div>
-
                                             <div class="col-12 mb-1">
-                                                <button class="btn btn-danger btn-sm w-100 p-3" @onclick="SendStopCommand" title="Экстренная остановка всех операций">
-                                                    <i class="bi bi-stop-circle-fill me-1"><strong>STOP</strong></i>
+                                                <button class="btn btn-danger btn-sm w-100 p-3"
+                                                        @onclick="SendStopCommand"
+                                                        title="Экстренная остановка всех операций">
+                                                    <b>STOP</b>
                                                 </button>
                                             </div>
                                         </div>
@@ -285,7 +333,7 @@
                                                 <div class="input-group input-group-sm">
                                                     <InputNumber @bind-Value="MaxSpeedInput" class="form-control form-control-sm" min="5" max="100" step="1" placeholder="Макс. скорость (%)" />
                                                     <button class="btn btn-secondary btn-sm w-75" value="5" @onclick="SendSetMaxSpeedShuttleCommand" title="Установить максимальную скорость">
-                                                        Установить максимальную скорость, % V
+                                                        Макс. скорость, % V
                                                     </button>
                                                 </div>
                                             </div>
@@ -327,40 +375,6 @@
                                                 <i class="bi bi-save me-1">Сохранить настройки</i>
                                             </button>
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header p-1">
-                                        <h6 class="fw-bold text-muted mb-0">Параметры</h6>
-                                    </div>
-                                    <div class="card-body p-2">
-                                        @*<button @onclick="ChoiceFile">Select .bin</button>
-
-                                         @if (_selectedFile != null)
-                                        {
-                                        <p>@_selectedFile</p>*@
-                                        <label for="Erase">full erase STM: </label>
-                                        <input type="checkbox" id="IsArase" name="Erase" checked="@IsFullErased" @onchange="OnAraseModeChanged" />
-                                        <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
-                                            Update STM
-                                        </button>
-
-                                        <button disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">
-                                            Update ESP
-                                        </button>
-                                        @*  } *@
-
-                                        @if (_isOtaRunning)
-                                        {
-                                            <progress value="@_otaPercent" max="100"></progress>
-                                            <p>@_otaPercent %</p>
-                                            <button @onclick="CancelOta">Cancel</button>
-                                        }
-
-                                        <p>@_otaStatus</p>
                                     </div>
                                 </div>
                             </div>
@@ -933,7 +947,10 @@
 
     }
 
-    private async Task SendSetlenghtOfShuttleCommand() => await SendCommandAsync($"{Shuttle.ShuttleNumber}dSl{LenghtOfShuttle}", $"Установка длины шаттла: {LenghtOfShuttle} мм");
+    private async Task SendSetlenghtOfShuttleCommand()
+    {
+        await SendCommandAsync($"{Shuttle.ShuttleNumber}dSl{LenghtOfShuttle}", $"Установка длины шаттла: {LenghtOfShuttle} мм");
+    }
 
     private async Task SetTime()
     {
