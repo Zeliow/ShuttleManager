@@ -2,56 +2,77 @@
 # Build artifacts
 bin/
 obj/
-*.dll
 *.exe
+*.dll
 *.pdb
-*.so
-*.dylib
-*.jar
-*.war
-*.class
-*.o
-*.obj
-*.out
+*.nupkg
+*.snupkg
 
-# Dependencies
-node_modules/
+# Dependency directories
 packages/
-.nuget/
-packages.lock.json
+node_modules/
 
 # Logs
 *.log
-logs/
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
 
 # OS generated files
 .DS_Store
 Thumbs.db
-ehthumbs.db
-Icon?
-desktop.ini
 
-# Testing
+# User-specific files
+.vs/
+.idea/
+*.userprefs
+
+# Environment specific
+.env
+.env.local
+*.env*
+
+# Test and coverage
+TestResults/
 coverage/
-htmlcov/
-.coverage
 *.coverage
+htmlcov/
+
+# Local configuration
+local.settings.json
+appsettings.Local.json
 
 # Temporary files
 *.tmp
 *.temp
-*~
-.DS_Store
+*.cache
+
+# Compiled and binary files
+*.pyc
+*.pyo
+*.class
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.exe
+*.out
+
+# Compression files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
 ```

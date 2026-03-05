@@ -398,30 +398,55 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             byte seq = connection.NextSeq++;
 
-            var cmdPacket = new CommandPacket
+            // Определяем тип сообщения и формируем пакет в зависимости от наличия аргумента
+            byte msgId;
+            byte[] payload;
+            
+            if (arg1 == 0 && arg2 == 0)
             {
-                CmdType = (byte)cmd,
-                Arg1 = arg1,
-                Arg2 = arg2
-            };
+                // Команда без аргумента - используем MSG_CMD_SIMPLE (1 байт)
+                msgId = (byte)MsgID.MSG_CMD_SIMPLE;
+                var cmdPacket = new SimpleCmdPacket
+                {
+                    CmdType = (byte)cmd
+                };
+                payload = new byte[1];
+                MemoryMarshal.Write(payload, ref cmdPacket);
+            }
+            else
+            {
+                // Команда с аргументом - используем MSG_CMD_WITH_ARG (5 байт)
+                msgId = (byte)MsgID.MSG_CMD_WITH_ARG;
+                var cmdPacket = new ParamCmdPacket
+                {
+                    CmdType = (byte)cmd,
+                    Arg = arg1
+                };
+                payload = new byte[5];
+                MemoryMarshal.Write(payload, ref cmdPacket);
+            }
 
-            int payloadSize = Marshal.SizeOf(cmdPacket);
-            int frameSize = 6 + payloadSize + 2;
+            // Формируем фрейм по протоколу V2
+            // Header: Sync1(1) + Sync2(1) + MsgID(1) + TargetID(1) + Seq(1) + Length(1) = 6 байт
+            int headerSize = 6;
+            int crcSize = 2;
+            int frameSize = headerSize + payload.Length + crcSize;
             byte[] frame = new byte[frameSize];
 
             // Header
-            frame[0] = 0xAA;
-            frame[1] = 0x55;
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
+            frame[0] = ProtocolConstants.PROTOCOL_SYNC_1_V2; // 0xBB
+            frame[1] = ProtocolConstants.PROTOCOL_SYNC_2_V2; // 0xCC
+            frame[2] = msgId;
+            frame[3] = ProtocolConstants.TARGET_ID_NONE; // Прямое соединение
             frame[4] = seq;
-            frame[5] = (byte)MsgID.MSG_COMMAND;
+            frame[5] = (byte)payload.Length;
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cmdPacket);
+            payload.CopyTo(frame, headerSize);
 
-            // CRC
-            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
+            // CRC16-CCITT
+            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, headerSize + payload.Length));
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(headerSize + payload.Length, 2), crc);
 
             try
             {
@@ -438,7 +463,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     }
                 });
 
-                await connection.NetworkStream.WriteAsync(frame, 0, frame.Length);
+                await connection.NetworkStream.WriteAsync(frame);
                 await connection.NetworkStream.FlushAsync();
 
                 return await tcs.Task;
@@ -471,22 +496,28 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             };
 
             int payloadSize = Marshal.SizeOf(cfgPacket);
-            int frameSize = 6 + payloadSize + 2;
+            
+            // Формируем фрейм по протоколу V2
+            // Header: Sync1(1) + Sync2(1) + MsgID(1) + TargetID(1) + Seq(1) + Length(1) = 6 байт
+            int headerSize = 6;
+            int crcSize = 2;
+            int frameSize = headerSize + payloadSize + crcSize;
             byte[] frame = new byte[frameSize];
 
-            // Header
-            frame[0] = 0xAA;
-            frame[1] = 0x55;
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
+            // Header - Protocol V2 format
+            frame[0] = ProtocolConstants.PROTOCOL_SYNC_1_V2; // 0xBB
+            frame[1] = ProtocolConstants.PROTOCOL_SYNC_2_V2; // 0xCC
+            frame[2] = (byte)MsgID.MSG_CONFIG_SET;
+            frame[3] = ProtocolConstants.TARGET_ID_NONE; // Прямое соединение
             frame[4] = seq;
-            frame[5] = (byte)MsgID.MSG_CONFIG_SET;
+            frame[5] = (byte)payloadSize; // Length - 1 byte in V2
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cfgPacket);
+            MemoryMarshal.Write(frame.AsSpan(headerSize, payloadSize), ref cfgPacket);
 
-            // CRC
-            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
+            // CRC16-CCITT
+            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, headerSize + payloadSize));
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(headerSize + payloadSize, 2), crc);
 
             try
             {
