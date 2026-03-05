@@ -75,27 +75,31 @@
                             <div class="card-body p-2">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label>
-                                        @(_showSensorsView ? "Датчики" : "Терминал")
+                                        @SwitchLabelView()
                                     </label>
                                     <div>
                                         <button class="btn btn-sm btn-outline-info me-1"
                                                 @onclick="SensorView"
                                                 title="Переключить отображение">
-                                            <i class="bi bi-speedometer2">👁</i>
+                                            <b class="bi bi-speedometer2">👁</b>
                                         </button>
-                                        <button class="btn btn-sm btn-outline-warning me-1" @onclick="TopScadaView">
-                                            <i class="bi bi-speedometer2">?</i>
+
+                                        @* <button class="btn btn-sm btn-outline-warning me-1"
+                                                @onclick="TopScadaView">
+                                            <b class="bi bi-speedometer2">?</b>
+                                        </button> *@
+
+                                        <button class="btn btn-sm btn-outline-info me-1"
+                                                @onclick="StatsView">
+                                            <b class="bi bi-graph-up">📊</b>
                                         </button>
-                                        @if (!_showSensorsView && !_showTopView)
+
+                                        @if (!_showSensorsView && !_statsView)
                                         {
                                             <button class="btn btn-sm btn-outline-danger me-1"
                                                     @onclick="ClearTerminal">
                                                 ❌
                                             </button>
-
-                                            <span class="badge bg-secondary">
-                                                @Shuttle.GetTerminalMessages().Count строк
-                                            </span>
                                         }
                                     </div>
                                 </div>
@@ -103,9 +107,13 @@
                                 {
                                     <ShuttleDataSensorComponent Shuttle="Shuttle" />
                                 }
-                                else if (_showTopView)
+                                @*                                 else if (_showTopView)
                                 {
                                     <ShuttleScadaView Shuttle="Shuttle" />
+                                } *@
+                                else if (_statsView)
+                                {
+                                    <ShuttleStatsComponent Shuttle="Shuttle" />
                                 }
                                 else
                                 {
@@ -524,15 +532,36 @@
     // Отображение сенсоров
     private bool _showSensorsView = false;
     private bool _showTopView = false;
+    private bool _statsView = false;
 
     private void SensorView()
     {
         _showSensorsView = !_showSensorsView;
+        _statsView = false;
     }
 
     private void TopScadaView()
     {
         _showTopView = !_showTopView;
+    }
+
+    private void StatsView()
+    {
+        _statsView = !_statsView;
+        _showSensorsView = false;
+    }
+
+    private string SwitchLabelView()
+    {
+        if (_showSensorsView)
+        {
+            return "Сенсоры";
+        }
+        else if (_statsView)
+        {
+            return "Статистика";
+        }
+        else return "Терминал";
     }
 
     protected override async Task OnInitializedAsync()
@@ -700,11 +729,11 @@
     {
         Shuttle.LastActivity = DateTime.Now;
         Shuttle.ErrorCode = data.ErrorCode;
-        Shuttle.CurrentStatus = $"Status: {data.ShuttleStatus}";
+        Shuttle.CurrentStatus = ((ShuttleState)data.ShuttleStatus).ToString();
         Shuttle.Position = data.CurrentPosition;
         Shuttle.CurrentSpeed = data.Speed;
         Shuttle.BatteryPercentage = data.BatteryCharge;
-        Shuttle.BatteryVoltage = data.BatteryVoltage;
+        Shuttle.BatteryVoltage = data.BatteryVoltage_mV;
         Shuttle.StateFlags = data.StateFlags;
         Shuttle.ShuttleNumber = Convert.ToString(data.ShuttleNumber);
 
@@ -723,8 +752,7 @@
         Shuttle.ForwardPalletDistance = data.DistancePltF;
         Shuttle.ReversePalletDistance = data.DistancePltR;
         Shuttle.Angle = data.Angle;
-        Shuttle.Temperature = data.Temperature;
-        Shuttle.HardwareFlags = data.HardwareFlags;
+        Shuttle.Temperature = data.Temperature_dC / 10;
 
         // Map Hardware Flags
         // Bit 0: detectPalleteF1, Bit 1: F2, Bit 2: R1, Bit 3: R2
@@ -751,7 +779,13 @@
         Shuttle.CompactCounter = data.CompactCounter;
         Shuttle.LiftUpCounter = data.LiftUpCounter;
         Shuttle.LiftDownCounter = data.LiftDownCounter;
-        Shuttle.PalleteCount = data.PalleteCount;
+        Shuttle.LifetimePalletsDetected = data.LifetimePalletsDetected;
+        Shuttle.TotalUptimeMinutes = data.TotalUptimeMinutes;
+        Shuttle.MotorStallCount = data.MotorStallCount;
+        Shuttle.LifterOverloadCount = data.LifterOverloadCount;
+        Shuttle.CrashCount = data.CrashCount;
+        Shuttle.WatchdogResets = data.WatchdogResets;
+        Shuttle.LowBatteryEvents = data.LowBatteryEvents;
     }
 
     private void UpdateConfig(ConfigPacket data)
@@ -869,7 +903,7 @@
     {
         // Arg1 = Unix Timestamp
         int timestamp = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await SendBinaryCmd(CmdType.CMD_SET_DATETIME, timestamp, 0, "Установка времени");
+        //await SendBinaryCmd(CmdType.CMD_SET_DATETIME, timestamp, 0, "Установка времени");
     }
 
     private bool isReversed = false;

@@ -59,7 +59,17 @@ public class Shuttle
     // New stats properties
     public uint TotalDist { get; set; }
 
+    public uint TotalUptimeMinutes;
+    public ushort MotorStallCount;
+    public ushort LifterOverloadCount;
+    public ushort CrashCount;
+    public ushort WatchdogResets;
+    public ushort LowBatteryEvents;
+
+    public uint LifetimePalletsDetected;
+
     public uint LoadCounter { get; set; }
+
     public uint UnloadCounter { get; set; }
     public uint CompactCounter { get; set; }
     public uint LiftUpCounter { get; set; }
