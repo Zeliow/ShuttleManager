@@ -2,18 +2,50 @@ using System.Runtime.InteropServices;
 
 namespace ShuttleManager.Shared.Models.Protocol
 {
+    // --- Constants ---
+    public static class ProtocolConstants
+    {
+        public const byte PROTOCOL_SYNC_1_V2 = 0xBB;
+        public const byte PROTOCOL_SYNC_2_V2 = 0xCC;
+        public const byte PROTOCOL_VER = 2;
+
+        public const byte TARGET_ID_NONE = 0x00;       // Direct UART line
+        public const byte TARGET_ID_BROADCAST = 0xFF;  // Global command
+
+        public const byte MAX_LOG_STRING_LEN = 55;
+        public const byte LOG_MAX_PRINTABLE_CHARS = MAX_LOG_STRING_LEN - 1;
+    }
+
     // --- Message IDs ---
     public enum MsgID : byte
     {
-        MSG_HEARTBEAT = 0x01, // High freq: Position, Speed, State
-        MSG_SENSORS = 0x02, // Med freq: TOF, Encoders, Pallet sensors
-        MSG_STATS = 0x03, // Low freq: Odometry, Cycles
-        MSG_LOG = 0x10, // Async: Human readable strings with levels
-        MSG_CONFIG_SET = 0x20, // Display -> Shuttle: Set EEPROM param
-        MSG_CONFIG_GET = 0x21, // Display -> Shuttle: Request param
-        MSG_CONFIG_REP = 0x22, // Shuttle -> Display: Reply with param
-        MSG_COMMAND = 0x30, // Display -> Shuttle: Action command
-        MSG_ACK = 0x31  // Shuttle -> Display: Command acknowledgment
+        // Routine Telemetry (Push/Pull)
+        MSG_HEARTBEAT = 0x01, // Pushed ONLY on request
+        MSG_SENSORS = 0x02, // Pushed ONLY on request
+        MSG_STATS = 0x03, // Pushed ONLY on request
+        MSG_REQ_HEARTBEAT = 0x04, // Pult -> Shuttle: Request Heartbeat (Keep-Alive)
+        MSG_REQ_SENSORS = 0x05, // Pult -> Shuttle: Request Sensors
+        MSG_REQ_STATS = 0x06, // Pult -> Shuttle: Request Stats
+        
+        // Asynchronous
+        MSG_LOG = 0x10, // Shuttle -> Display: Truncated vsnprintf string
+        
+        // Configuration
+        MSG_CONFIG_SET = 0x20, // Pult/Display -> Shuttle: Set single EEPROM param
+        MSG_CONFIG_GET = 0x21, // Pult/Display -> Shuttle: Request single param
+        MSG_CONFIG_REP = 0x22, // Shuttle -> Pult/Display: Reply with single param
+        MSG_CONFIG_SYNC_REQ = 0x23, // Pult/Display -> Shuttle: Request FullConfigPacket
+        MSG_CONFIG_SYNC_PUSH = 0x24, // Pult/Display -> Shuttle: Send FullConfigPacket to save
+        MSG_CONFIG_SYNC_REP = 0x25, // Shuttle -> Pult/Display: Reply with FullConfigPacket
+
+        // Action Commands (Split for bandwidth efficiency)
+        MSG_CMD_SIMPLE = 0x30, // Pult/Display -> Shuttle: 1-byte payload (No arguments)
+        MSG_CMD_WITH_ARG = 0x31, // Pult/Display -> Shuttle: 5-byte payload (Cmd + int32_t arg)
+        MSG_SET_DATETIME = 0x32, // Display -> Shuttle: RTC Sync (DateTimePacket)
+        MSG_ACK = 0x33,  // Shuttle -> Pult/Display: Command acknowledgment
+
+        // Old protocol compatibility
+        MSG_COMMAND = 0x30  // Display -> Shuttle: Action command (Legacy)
     }
 
     // --- Enums ---
@@ -157,5 +189,161 @@ namespace ShuttleManager.Shared.Models.Protocol
     {
         public byte RefSeq;            // Sequence number of the command being ACK'd
         public byte Result;            // 0 = Success/Accepted, 1 = Error, 2 = Busy
+    }
+
+    // --- New Protocol Structs ---
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct NewFrameHeader
+    {
+        public byte Sync1;      // Always 0xBB
+        public byte Sync2;      // Always 0xCC
+        public byte MsgID;      // Identifies the Payload struct (MsgID enum)
+        public byte TargetID;   // Routing identifier
+        public byte Seq;        // Rolling sequence counter (0-255)
+        public byte Length;     // Length of Payload ONLY (excludes header and CRC)
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct TelemetryPacketNew
+    {
+        public ushort ErrorCode;        
+        public ushort CurrentPosition;  // mm
+        public ushort Speed;
+        public ushort BatteryVoltage_mV;// 12500 = 12.5V
+        public ushort StateFlags;       // Bit 0: lifterUp, 1: motorStart, 2: reverse, 3: inv, 4: inChnl, 5: fifoLifo
+        public ShuttleState ShuttleStatus; // Current high-level operation
+        public byte BatteryCharge;    // %
+        public byte ShuttleNumber;    
+        public byte PalleteCount;     
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct SensorPacketNew
+    {
+        public ushort DistanceF;
+        public ushort DistanceR;
+        public ushort DistancePltF;
+        public ushort DistancePltR;
+        public ushort Angle;            
+        public short LifterCurrent;
+        public short Temperature_dC;   // 255 = 25.5C
+        public ushort HardwareFlags;    // Bitmask for discretes
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct StatsPacketNew
+    {
+        public uint TotalDist;                
+        public uint LoadCounter;              
+        public uint UnloadCounter;            
+        public uint CompactCounter;           
+        public uint LiftUpCounter;            
+        public uint LiftDownCounter;          
+        public uint LifetimePalletsDetected;  
+        public uint TotalUptimeMinutes;       
+        public ushort MotorStallCount;          
+        public ushort LifterOverloadCount;      
+        public ushort CrashCount;               
+        public ushort WatchdogResets;           
+        public ushort LowBatteryEvents;         
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct FullConfigPacket
+    {
+        public ushort InterPallet;
+        public ushort ShuttleLen;
+        public ushort MaxSpeed;
+        public ushort WaitTime;
+        public short MprOffset;
+        public short ChnlOffset;
+        public byte ShuttleNumber;
+        public byte MinBatt;
+        public byte FifoLifo;
+        public byte ReverseMode;
+
+        public byte[] ToByteArray()
+        {
+            byte[] bytes = new byte[Marshal.SizeOf<FullConfigPacket>()];
+            IntPtr ptr = Marshal.AllocHGlobal(bytes.Length);
+            try
+            {
+                Marshal.StructureToPtr(this, ptr, false);
+                Marshal.Copy(ptr, bytes, 0, bytes.Length);
+                return bytes;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+        }
+
+        public static FullConfigPacket FromByteArray(byte[] bytes)
+        {
+            if (bytes.Length != Marshal.SizeOf<FullConfigPacket>())
+                throw new ArgumentException("Invalid byte array length for FullConfigPacket");
+
+            IntPtr ptr = Marshal.AllocHGlobal(bytes.Length);
+            try
+            {
+                Marshal.Copy(bytes, 0, ptr, bytes.Length);
+                return (FullConfigPacket)Marshal.PtrToStructure(ptr, typeof(FullConfigPacket));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+        }
+    }
+
+    // Used with MSG_CONFIG_SET / MSG_CONFIG_GET / MSG_CONFIG_REP (5 bytes)
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct ConfigPacketNew
+    {
+        public int Value;             
+        public byte ParamID;           
+    }
+
+    // Used with MSG_CMD_SIMPLE (1 byte)
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct SimpleCmdPacket
+    {
+        public byte CmdType;           
+    }
+
+    // Used with MSG_CMD_WITH_ARG (5 bytes)
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct ParamCmdPacket
+    {
+        public int Arg;               
+        public byte CmdType;           
+    }
+
+    // Used with MSG_SET_DATETIME (6 bytes)
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct DateTimePacket
+    {
+        public byte Year;              // Offset from 2000
+        public byte Month;
+        public byte Day;
+        public byte Hour;
+        public byte Minute;
+        public byte Second;
+    }
+
+    // Used with MSG_LOG (Variable length up to MAX_LOG_STRING_LEN + 1)
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct LogPacketNew
+    {
+        public byte LogLevel;                  
+        // char message[MAX_LOG_STRING_LEN];  // This will be handled separately in C#
+    }
+
+    // Used with MSG_ACK (2 bytes)
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct AckPacketNew
+    {
+        public byte RefSeq;  // Sequence number of the command being ACK'd
+        public AckResult Result; // Reason code for the ACK response
     }
 }

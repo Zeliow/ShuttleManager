@@ -1,60 +1,66 @@
 ```
 # Build artifacts
-bin/
-obj/
-*.dll
+*.o
+*.obj
 *.exe
-*.pdb
-*.nupkg
-*.snupkg
+*.dll
 *.so
-*.dylib
 *.a
+*.out
 
 # Dependencies
-packages/
 node_modules/
-.nuget/
-.nyc_output/
-coverage/
+venv/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
-# IDE specific
-.vs/
+# IDE/Editor files
 .vscode/
 .idea/
-*.userprefs
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-
-# OS generated
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Icon?
-desktop.ini
+*.swp
+*.swo
+*.tmp
 
 # Logs
 *.log
-*.bak
-*.backup
 
-# Configuration
-appsettings.Development.json
-appsettings.Production.json
-secrets.*
-*.local.settings.json
-
-# Testing
-TestResults/
+# Coverage
 coverage/
-*.coverage
-*.log
+htmlcov/
+.coverage
 
-# Temporary files
-*.tmp
-*.temp
-*.cache
-*.cached
+# System files
+.DS_Store
+Thumbs.db
+.env
+.env.local
+*.env.*
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
