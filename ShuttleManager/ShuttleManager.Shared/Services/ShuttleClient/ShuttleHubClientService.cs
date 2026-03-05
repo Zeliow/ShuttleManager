@@ -12,6 +12,12 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 {
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     {
+        // Protocol V2 constants for frame parsing
+        private const byte PROTOCOL_SYNC_1_V2 = 0xBB;
+
+        private const byte PROTOCOL_SYNC_2_V2 = 0xCC;
+        private const int MAX_PAYLOAD_SIZE = 64; // Maximum reasonable payload size
+
         public event Action<string, ShuttleMessageBase>? LogReceived;
 
         public event Action<string, int>? Connected;
@@ -110,7 +116,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             try
             {
                 Debug.WriteLine("Старт TCP контакта для прямого подключнения");
-                OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = "Connecting..." });
+                OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = $"Connecting to {ipAddress}:{port}..." });
 
                 connection.TcpClient = new TcpClient();
                 await connection.TcpClient.ConnectAsync(ipAddress, port);
@@ -121,6 +127,9 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
 
                 connection.NetworkStream = connection.TcpClient.GetStream();
+
+                // Initialize the connection with a default shuttle ID before receiving the first heartbeat
+                connection.ShuttleId = -1; // Will be updated when first heartbeat arrives
 
                 OnConnected(ipAddress, connection.ShuttleId);
 
@@ -135,6 +144,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ShuttleHubClientService] Ошибка подключения к {ipAddress}: {ex.Message}");
+                OnLogReceived(ipAddress, new RawLogMessage { Level = LogLevel.LOG_ERROR, Text = $"Connection failed: {ex.Message}" });
                 await InternalDisconnectAsync(ipAddress);
             }
         }
@@ -181,24 +191,21 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             while (offset < data.Length)
             {
-                // 1. Look for Sync (0xAA 0x55)
+                // 1. Look for Sync (0xBB 0xCC) - Protocol V2
                 int syncIndex = -1;
                 for (int i = offset; i < data.Length - 1; i++)
                 {
-                    if (data[i] == 0xAA && data[i + 1] == 0x55)
+                    if (data[i] == PROTOCOL_SYNC_1_V2 && data[i + 1] == PROTOCOL_SYNC_2_V2)
                     {
                         syncIndex = i;
                         break;
                     }
                 }
 
-                // 2. Look for Newline (legacy text support)
-                int newlineIndex = Array.IndexOf(data, (byte)'\n', offset);
-
-                // Priority: Binary Frame if Sync exists and (no newline OR Sync is before newline)
-                if (syncIndex != -1 && (newlineIndex == -1 || syncIndex < newlineIndex))
+                // Priority: Binary Frame if Sync exists
+                if (syncIndex != -1)
                 {
-                    // Check Header Size (6 bytes)
+                    // Check Header Size (6 bytes): Sync1(1), Sync2(1), MsgID(1), TargetID(1), Seq(1), Length(1)
                     if (data.Length - syncIndex < 6)
                     {
                         // Not enough data for header, keep buffer from syncIndex
@@ -207,9 +214,20 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                         break; // Need more data
                     }
 
-                    // Read Header
-                    // Sync1(1), Sync2(1), Length(2), Seq(1), MsgID(1)
-                    ushort payloadLength = BinaryPrimitives.ReadUInt16LittleEndian(new ReadOnlySpan<byte>(data, syncIndex + 2, 2));
+                    // Read Header fields - Protocol V2 format
+                    byte msgId = data[syncIndex + 2];
+                    byte targetId = data[syncIndex + 3];
+                    byte seq = data[syncIndex + 4];
+                    byte payloadLength = data[syncIndex + 5];
+
+                    // Safety check: ensure payload length is reasonable to avoid memory allocation attacks
+                    if (payloadLength > MAX_PAYLOAD_SIZE)
+                    {
+                        Debug.WriteLine($"[ShuttleHubClientService] Invalid payload length {payloadLength} from {connection.IpAddress}, discarding sync");
+                        offset = syncIndex + 2;
+                        processedAny = true;
+                        continue;
+                    }
 
                     int totalFrameSize = 6 + payloadLength + 2; // Header + Payload + CRC
 
@@ -228,8 +246,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     if (receivedCrc == calculatedCrc)
                     {
                         // Valid Frame
-                        byte seq = data[syncIndex + 4];
-                        byte msgId = data[syncIndex + 5];
                         var payload = new ReadOnlySpan<byte>(data, syncIndex + 6, payloadLength);
 
                         HandleBinaryMessage(connection, (MsgID)msgId, payload, seq);
@@ -245,28 +261,9 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                         processedAny = true;
                     }
                 }
-                //else if (newlineIndex != -1)
-                //{
-                //    // Found newline before any sync -> Text line
-                //    int length = newlineIndex - offset;
-                //    if (length > 0)
-                //    {
-                //        string line = Encoding.UTF8.GetString(data, offset, length).Trim();
-                //        if (line.Length > 0 && line[^1] == '\r') line = line[..^1];
-
-                //        if (!string.IsNullOrWhiteSpace(line))
-                //        {
-                //            OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = line });
-                //        }
-                //    }
-                //    offset = newlineIndex + 1; // Skip \n
-                //    processedAny = true;
-                //}
                 else
                 {
-                    // No Sync, No Newline found in remaining data
-                    // If buffer is getting huge without sync or newline, we might want to discard
-                    // But for now, we wait for more data.
+                    // No Sync found in remaining data
                     break;
                 }
             }
@@ -289,7 +286,16 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             {
                 case MsgID.MSG_HEARTBEAT:
                     if (payload.Length >= Marshal.SizeOf<TelemetryPacket>())
-                        message = new TelemetryMessage { Data = MemoryMarshal.Read<TelemetryPacket>(payload) };
+                    {
+                        var packet = MemoryMarshal.Read<TelemetryPacket>(payload);
+                        message = new TelemetryMessage { Data = packet };
+
+                        // Update shuttle ID from heartbeat if not already set
+                        if (connection.ShuttleId == -1)
+                        {
+                            connection.ShuttleId = (int)packet.ShuttleNumber;
+                        }
+                    }
                     break;
 
                 case MsgID.MSG_SENSORS:
@@ -393,30 +399,55 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             byte seq = connection.NextSeq++;
 
-            var cmdPacket = new CommandPacket
-            {
-                CmdType = (byte)cmd,
-                Arg1 = arg1,
-                Arg2 = arg2
-            };
+            // Определяем тип сообщения и формируем пакет в зависимости от наличия аргумента
+            byte msgId;
+            byte[] payload;
 
-            int payloadSize = Marshal.SizeOf(cmdPacket);
-            int frameSize = 6 + payloadSize + 2;
+            if (arg1 == 0 && arg2 == 0)
+            {
+                // Команда без аргумента - используем MSG_CMD_SIMPLE (1 байт)
+                msgId = (byte)MsgID.MSG_CMD_SIMPLE;
+                var cmdPacket = new SimpleCmdPacket
+                {
+                    CmdType = (byte)cmd
+                };
+                payload = new byte[1];
+                MemoryMarshal.Write(payload, ref cmdPacket);
+            }
+            else
+            {
+                // Команда с аргументом - используем MSG_CMD_WITH_ARG (5 байт)
+                msgId = (byte)MsgID.MSG_CMD_WITH_ARG;
+                var cmdPacket = new ParamCmdPacket
+                {
+                    CmdType = (byte)cmd,
+                    Arg = arg1
+                };
+                payload = new byte[5];
+                MemoryMarshal.Write(payload, ref cmdPacket);
+            }
+
+            // Формируем фрейм по протоколу V2
+            // Header: Sync1(1) + Sync2(1) + MsgID(1) + TargetID(1) + Seq(1) + Length(1) = 6 байт
+            int headerSize = 6;
+            int crcSize = 2;
+            int frameSize = headerSize + payload.Length + crcSize;
             byte[] frame = new byte[frameSize];
 
             // Header
-            frame[0] = 0xAA;
-            frame[1] = 0x55;
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
+            frame[0] = ProtocolConstants.PROTOCOL_SYNC_1_V2; // 0xBB
+            frame[1] = ProtocolConstants.PROTOCOL_SYNC_2_V2; // 0xCC
+            frame[2] = msgId;
+            frame[3] = ProtocolConstants.TARGET_ID_NONE; // Прямое соединение
             frame[4] = seq;
-            frame[5] = (byte)MsgID.MSG_COMMAND;
+            frame[5] = (byte)payload.Length;
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cmdPacket);
+            payload.CopyTo(frame, headerSize);
 
-            // CRC
-            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
+            // CRC16-CCITT
+            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, headerSize + payload.Length));
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(headerSize + payload.Length, 2), crc);
 
             try
             {
@@ -433,7 +464,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     }
                 });
 
-                await connection.NetworkStream.WriteAsync(frame, 0, frame.Length);
+                await connection.NetworkStream.WriteAsync(frame);
                 await connection.NetworkStream.FlushAsync();
 
                 return await tcs.Task;
@@ -466,22 +497,28 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             };
 
             int payloadSize = Marshal.SizeOf(cfgPacket);
-            int frameSize = 6 + payloadSize + 2;
+
+            // Формируем фрейм по протоколу V2
+            // Header: Sync1(1) + Sync2(1) + MsgID(1) + TargetID(1) + Seq(1) + Length(1) = 6 байт
+            int headerSize = 6;
+            int crcSize = 2;
+            int frameSize = headerSize + payloadSize + crcSize;
             byte[] frame = new byte[frameSize];
 
-            // Header
-            frame[0] = 0xAA;
-            frame[1] = 0x55;
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2, 2), (ushort)payloadSize);
+            // Header - Protocol V2 format
+            frame[0] = ProtocolConstants.PROTOCOL_SYNC_1_V2; // 0xBB
+            frame[1] = ProtocolConstants.PROTOCOL_SYNC_2_V2; // 0xCC
+            frame[2] = (byte)MsgID.MSG_CONFIG_SET;
+            frame[3] = ProtocolConstants.TARGET_ID_NONE; // Прямое соединение
             frame[4] = seq;
-            frame[5] = (byte)MsgID.MSG_CONFIG_SET;
+            frame[5] = (byte)payloadSize; // Length - 1 byte in V2
 
             // Payload
-            MemoryMarshal.Write(frame.AsSpan(6, payloadSize), ref cfgPacket);
+            MemoryMarshal.Write(frame.AsSpan(headerSize, payloadSize), ref cfgPacket);
 
-            // CRC
-            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, 6 + payloadSize));
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6 + payloadSize, 2), crc);
+            // CRC16-CCITT
+            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, headerSize + payloadSize));
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(headerSize + payloadSize, 2), crc);
 
             try
             {

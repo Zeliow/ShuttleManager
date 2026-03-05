@@ -2,18 +2,47 @@ using System.Runtime.InteropServices;
 
 namespace ShuttleManager.Shared.Models.Protocol
 {
+    // --- Protocol Constants V2 ---
+    public static class ProtocolConstants
+    {
+        public const byte PROTOCOL_SYNC_1_V2 = 0xBB;
+        public const byte PROTOCOL_SYNC_2_V2 = 0xCC;
+        public const byte PROTOCOL_VER = 2;
+        
+        public const byte TARGET_ID_NONE = 0x00;
+        public const byte TARGET_ID_BROADCAST = 0xFF;
+        
+        public const byte MAX_LOG_STRING_LEN = 55;
+        public const byte LOG_MAX_PRINTABLE_CHARS = MAX_LOG_STRING_LEN - 1;
+    }
+
     // --- Message IDs ---
     public enum MsgID : byte
     {
-        MSG_HEARTBEAT = 0x01, // High freq: Position, Speed, State
-        MSG_SENSORS = 0x02, // Med freq: TOF, Encoders, Pallet sensors
-        MSG_STATS = 0x03, // Low freq: Odometry, Cycles
-        MSG_LOG = 0x10, // Async: Human readable strings with levels
-        MSG_CONFIG_SET = 0x20, // Display -> Shuttle: Set EEPROM param
-        MSG_CONFIG_GET = 0x21, // Display -> Shuttle: Request param
-        MSG_CONFIG_REP = 0x22, // Shuttle -> Display: Reply with param
-        MSG_COMMAND = 0x30, // Display -> Shuttle: Action command
-        MSG_ACK = 0x31  // Shuttle -> Display: Command acknowledgment
+        // Routine Telemetry (Push/Pull)
+        MSG_HEARTBEAT = 0x01,
+        MSG_SENSORS = 0x02,
+        MSG_STATS = 0x03,
+        MSG_REQ_HEARTBEAT = 0x04,
+        MSG_REQ_SENSORS = 0x05,
+        MSG_REQ_STATS = 0x06,
+        
+        // Asynchronous
+        MSG_LOG = 0x10,
+        
+        // Configuration
+        MSG_CONFIG_SET = 0x20,
+        MSG_CONFIG_GET = 0x21,
+        MSG_CONFIG_REP = 0x22,
+        MSG_CONFIG_SYNC_REQ = 0x23,
+        MSG_CONFIG_SYNC_PUSH = 0x24,
+        MSG_CONFIG_SYNC_REP = 0x25,
+
+        // Action Commands (Split for bandwidth efficiency)
+        MSG_CMD_SIMPLE = 0x30,
+        MSG_CMD_WITH_ARG = 0x31,
+        MSG_SET_DATETIME = 0x32,
+        MSG_ACK = 0x33
     }
 
     // --- Enums ---
@@ -24,45 +53,72 @@ namespace ShuttleManager.Shared.Models.Protocol
 
     public enum CmdType : byte
     {
-        CMD_STOP = 5,   // "dStop_"
+        // -- 0x00 Block: Lifecycle & State --
+        CMD_STOP = 0x00,
+        CMD_STOP_MANUAL = 0x01,
+        CMD_SYSTEM_RESET = 0x02,
+        CMD_RESET_ERROR = 0x03,
+        CMD_MANUAL_MODE = 0x04,
+        CMD_LOG_MODE = 0x05,
+        CMD_DEMO = 0x06,
+        CMD_HOME = 0x07,
 
-        //CMD_STOP_MANUAL     = 55,  // "dStopM"
-        //CMD_MOVE_RIGHT_MAN  = 1,   // "dRight"
-        //CMD_MOVE_LEFT_MAN   = 2,   // "dLeft_"
-        CMD_LIFT_UP = 3,   // "dUp___"
+        // -- 0x10 Block: Core Movement --
+        CMD_MOVE_RIGHT_MAN = 0x10,
+        CMD_MOVE_LEFT_MAN = 0x11,
+        CMD_MOVE_DIST_R = 0x12,
+        CMD_MOVE_DIST_F = 0x13,
+        CMD_LIFT_UP = 0x14,
+        CMD_LIFT_DOWN = 0x15,
+        CMD_CALIBRATE = 0x16,
 
-        CMD_LIFT_DOWN = 4,   // "dDown_"
-        CMD_LOAD = 6,   // "dLoad_"
-        CMD_UNLOAD = 7,   // "dUnld_"
-        CMD_MOVE_DIST_R = 8,   // "dMr"
-        CMD_MOVE_DIST_F = 9,   // "dMf"
-        CMD_CALIBRATE = 10,  // "dClbr_"
-        CMD_DEMO = 11,  // "dDemo_"
-        CMD_COUNT_PALLETS = 12,  // "dGetQu"
-        CMD_SAVE_EEPROM = 13,  // "dSaveC"
-        CMD_COMPACT_F = 14,  // "dComFo"
-        CMD_COMPACT_R = 15,  // "dComBa"
-        CMD_GET_CONFIG = 16,  // "dSGet_" / "dSpGet"
+        // -- 0x20 Block: Auto Operations --
+        CMD_LOAD = 0x20,
+        CMD_UNLOAD = 0x21,
+        CMD_LONG_LOAD = 0x22,
+        CMD_LONG_UNLOAD = 0x23,
+        CMD_LONG_UNLOAD_QTY = 0x24,
+        CMD_COMPACT_F = 0x25,
+        CMD_COMPACT_R = 0x26,
+        CMD_COUNT_PALLETS = 0x27,
+        CMD_EVACUATE_ON = 0x28,
 
-        //CMD_TEST_SENSORS    = 17,  // "dDataP"
-        //CMD_ERROR_REQ       = 19,  // "tError"
-        //CMD_EVACUATE_ON     = 20,  // "dEvOn_"
-        //CMD_EVACUATE_OFF    = 28,  // "dEvOff"
-        CMD_LONG_LOAD = 21,  // "dLLoad"
+        // -- 0x30 Block: Configuration Updates --
+        CMD_SAVE_EEPROM = 0x30,
+        CMD_GET_CONFIG = 0x31,
+        CMD_FIRMWARE_UPDATE = 0x32
+    }
 
-        CMD_LONG_UNLOAD = 22,  // "dLUnld"
-        CMD_LONG_UNLOAD_QTY = 23,  // "dQt"
-        CMD_RESET_ERROR = 24,  // "dReset"
+    public enum AckResult : byte
+    {
+        ACK_OK = 0,
+        ACK_REJECTED = 1,
+        ACK_BUSY = 2,
+        ACK_BAD_ENVIRONMENT = 3,
+        ACK_ERROR_STATE = 4
+    }
 
-        //CMD_MANUAL_MODE     = 25,  // "dManua"
-        //CMD_LOG_MODE        = 26,  // "dGetLg"
-        CMD_HOME = 27,  // "dHome_"
-
-        //CMD_PING            = 100, // "ngPing"
-        CMD_FIRMWARE_UPDATE = 200, // "Firmware"
-
-        CMD_SYSTEM_RESET = 201, // "Reboot__"
-        CMD_SET_DATETIME = 202  // "DT"
+    public enum ShuttleState : byte
+    {
+        STATE_IDLE = 0,
+        STATE_MANUAL = 1,
+        STATE_LOAD = 2,
+        STATE_UNLOAD = 3,
+        STATE_COMPACT = 4,
+        STATE_EVACUATE = 5,
+        STATE_DEMO = 6,
+        STATE_COUNT_PALLETS = 7,
+        STATE_ERROR = 8,
+        STATE_WAITING = 9,
+        STATE_LONG_LOAD = 10,
+        STATE_LONG_UNLOAD = 11,
+        STATE_LONG_UNLOAD_QTY = 12,
+        STATE_MOVE_FWD = 13,
+        STATE_MOVE_REV = 14,
+        STATE_LIFT_UP = 15,
+        STATE_LIFT_DOWN = 16,
+        STATE_HOME = 17,
+        STATE_CALIBRATE = 18
     }
 
     public enum ConfigParamID : byte
@@ -83,79 +139,116 @@ namespace ShuttleManager.Shared.Models.Protocol
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FrameHeader
     {
-        public byte Sync1;      // Always 0xAA
-        public byte Sync2;      // Always 0x55
-        public ushort Length;   // Length of Payload ONLY (excludes header and CRC)
+        public byte Sync1;      // Always 0xBB (PROTOCOL_SYNC_1_V2)
+        public byte Sync2;      // Always 0xCC (PROTOCOL_SYNC_2_V2)
+        public byte MsgID;      // Identifies the Payload struct (MsgID enum)
+        public byte TargetID;   // Routing identifier
         public byte Seq;        // Rolling sequence counter (0-255)
-        public byte MsgID;      // Identifies the Payload struct
+        public byte Length;     // Length of Payload ONLY (excludes header and CRC)
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct TelemetryPacket
     {
-        public uint Timestamp;        // millis()
-        public ushort ErrorCode;        // Replaces 16-byte errorStatus array
-        public byte ShuttleStatus;    // Current status (0-27 mapping)
+        public ushort ErrorCode;
         public ushort CurrentPosition;  // mm
-        public ushort Speed;            // Current speed %
+        public ushort Speed;
+        public ushort BatteryVoltage_mV;// 12500 = 12.5V
+        public ushort StateFlags;       // Bit 0: lifterUp, 1: motorStart, 2: reverse, 3: inv, 4: inChnl, 5: fifoLifo
+        public ShuttleState ShuttleStatus;
         public byte BatteryCharge;    // %
-        public float BatteryVoltage;   // Volts
-        public ushort StateFlags;
-
-        public uint ShuttleNumber;
+        public byte ShuttleNumber;
+        public byte PalletCount;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct SensorPacket
     {
-        public ushort DistanceF;        // distance[1]
-        public ushort DistanceR;        // distance[0]
-        public ushort DistancePltF;     // distance[3]
-        public ushort DistancePltR;     // distance[2]
-        public ushort Angle;            // as5600.readAngle()
-        public short LifterCurrent;    //
-        public float Temperature;      // Chip temp
-        public byte HardwareFlags;
+        public ushort DistanceF;
+        public ushort DistanceR;
+        public ushort DistancePltF;
+        public ushort DistancePltR;
+        public ushort Angle;
+        public short LifterCurrent;
+        public short Temperature_dC;   // 255 = 25.5C
+        public ushort HardwareFlags;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct StatsPacket
     {
-        public uint TotalDist;        //
-        public uint LoadCounter;      //
-        public uint UnloadCounter;    //
-        public uint CompactCounter;   //
-        public uint LiftUpCounter;    //
-        public uint LiftDownCounter;  //
-        public byte PalleteCount;     //
+        public uint TotalDist;
+        public uint LoadCounter;
+        public uint UnloadCounter;
+        public uint CompactCounter;
+        public uint LiftUpCounter;
+        public uint LiftDownCounter;
+        public uint LifetimePalletsDetected;
+        public uint TotalUptimeMinutes;
+        public ushort MotorStallCount;
+        public ushort LifterOverloadCount;
+        public ushort CrashCount;
+        public ushort WatchdogResets;
+        public ushort LowBatteryEvents;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public struct LogPacket
+    public struct FullConfigPacket
     {
-        public byte Level;             // LogLevel enum
-        // char text[];            // Implicit payload data. Length = FrameHeader.length - 1
+        public ushort InterPallet;
+        public ushort ShuttleLen;
+        public ushort MaxSpeed;
+        public ushort WaitTime;
+        public short MprOffset;
+        public short ChnlOffset;
+        public byte ShuttleNumber;
+        public byte MinBatt;
+        public byte FifoLifo;
+        public byte ReverseMode;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct ConfigPacket
     {
-        public byte ParamID;           // ConfigParamID enum
-        public int Value;             // Value to set / reported value
+        public int Value;
+        public byte ParamID;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public struct CommandPacket
+    public struct SimpleCmdPacket
     {
-        public byte CmdType;           // CmdType enum
-        public int Arg1;              // Used for Distances (dMr, dMf), Qty (dQt)
-        public int Arg2;              // Unused currently, reserved for future
+        public byte CmdType;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct ParamCmdPacket
+    {
+        public int Arg;
+        public byte CmdType;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct DateTimePacket
+    {
+        public byte Year;    // Offset from 2000
+        public byte Month;
+        public byte Day;
+        public byte Hour;
+        public byte Minute;
+        public byte Second;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct LogPacket
+    {
+        public byte LogLevel;
+        // char message[MAX_LOG_STRING_LEN]; // Null terminated via vsnprintf
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct AckPacket
     {
-        public byte RefSeq;            // Sequence number of the command being ACK'd
-        public byte Result;            // 0 = Success/Accepted, 1 = Error, 2 = Busy
+        public byte RefSeq;
+        public AckResult Result;
     }
 }
