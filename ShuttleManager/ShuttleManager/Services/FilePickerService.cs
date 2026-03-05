@@ -13,11 +13,8 @@ public class FilePickerService : IFilePickerService
                 new Dictionary<DevicePlatform, IEnumerable<string>>
                 {
                     { DevicePlatform.Android, new[] { ".bin" } },
-                    { DevicePlatform.iOS, new[] { ".bin" } },
                     { DevicePlatform.WinUI, new[] { ".bin" } },
-                    { DevicePlatform.Tizen, new[] { ".bin" } },
-                    { DevicePlatform.macOS, new[] { ".bin" } }
-                })
+                }),
         };
 
         var result = await FilePicker.Default.PickAsync(options);
@@ -29,7 +26,7 @@ public class FilePickerService : IFilePickerService
             FileName = result.FileName,
             FilePath = result.FullPath,
             DataStream = await result.OpenReadAsync(),
-            ContentType = result.ContentType
+            ContentType = result.ContentType,
         };
     }
 }

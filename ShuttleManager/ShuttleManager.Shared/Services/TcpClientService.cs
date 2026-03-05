@@ -1,6 +1,6 @@
-﻿using ShuttleManager.Shared.Services.TcpOfClient;
-using System.Buffers;
+﻿using System.Buffers;
 using System.Net.Sockets;
+using ShuttleManager.Shared.Interfaces;
 
 namespace ShuttleManager.Shared.Services;
 

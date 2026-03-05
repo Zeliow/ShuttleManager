@@ -2,7 +2,6 @@
 using ShuttleManager.Services;
 using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Services;
-using ShuttleManager.Shared.Services.TcpOfClient;
 
 namespace ShuttleManager.Platforms.Windows;
 

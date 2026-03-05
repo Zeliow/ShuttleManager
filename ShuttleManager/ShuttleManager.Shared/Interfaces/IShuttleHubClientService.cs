@@ -1,5 +1,5 @@
-﻿using ShuttleManager.Shared.Models;
-using System.Net;
+﻿using System.Net;
+using ShuttleManager.Shared.Models;
 
 namespace ShuttleManager.Shared.Interfaces;
 
@@ -23,13 +23,13 @@ public interface IShuttleHubClientService
 
     event Action<string>? Disconnected;                // Передаёт IP
 
-    public Task ConnectToShuttleAsync(string ipAddress, int port);
+    Task ConnectToShuttleAsync(string ipAddress, int port);
 
     void DisconnectFromShuttle(string ipAddress);
 
-    public Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs);
+    Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs);
 
     List<Shuttle> GetConnectedShuttles();
 
-    public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000);
+    Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000);
 }

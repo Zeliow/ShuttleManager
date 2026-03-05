@@ -4,7 +4,9 @@ namespace ShuttleManager.Shared.Models;
 
 public class Shuttle
 {
-    public string ShuttleNumber { get; set; } = "";
+    private readonly object _lock = new object();
+
+    public string ShuttleNumber { get; set; } = string.Empty;
     public string? IPAddress { get; set; } = string.Empty;
     public int BatteryPercentage { get; set; } = 0;
     public bool IsAutoLogging { get; set; }
@@ -51,10 +53,8 @@ public class Shuttle
     public string ConnectionStatus { get; set; } = "Offline";
     public DateTime LastConnectionCheck { get; set; } = DateTime.MinValue;
 
-    public string FullStatusBlock { get; set; } = "";
+    public string FullStatusBlock { get; set; } = string.Empty;
     private List<string> _terminalMessages = [];
-
-    private readonly object _lock = new object();
 
     public void AddTerminalMessage(string message)
     {
