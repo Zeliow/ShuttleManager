@@ -386,6 +386,8 @@
     </div>
 </div>
 
+@using System.Text.RegularExpressions
+@using System.Threading.Channels
 @code {
     [Parameter] public Shuttle Shuttle { get; set; } = null!;
     [Parameter] public EventCallback<string> OnDisconnected { get; set; }
@@ -445,6 +447,10 @@
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.LogReceived += OnLogReceived;
             pathLogShuttle = Path.Combine($"{AppContext.BaseDirectory}/logs", $"Shuttle_Log_Number_{DateTime.Now.Day}_{DateTime.Now.Month}_{DateTime.Now.Year}_{Shuttle.IPAddress}.txt");
+
+            // Optimization: Start the background log processor.
+            _logProcessorTask = StartLogProcessorAsync(_componentCts.Token);
+
             Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
             StateHasChanged();
         }
@@ -582,245 +588,362 @@
         Shuttle.WarningCode = warn;
     }
 
+    // Optimization: Cache compiled Regex instances to avoid repeated overhead for every log line.
+    private static readonly Regex RegexCb = new(@"^CB\s+(\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexBatt = new(@"Batt voltage = ([\d.]+)V Charge = (\d+)% limit = (\d+)%", RegexOptions.Compiled);
+    private static readonly Regex RegexInverse = new(@"Inverse = (YES|NO)", RegexOptions.Compiled);
+    private static readonly Regex RegexStatus = new(@"Status = (.+?)\s+\((\d+)\)", RegexOptions.Compiled);
+    private static readonly Regex RegexMpr = new(@"MPR = (\d+)\s+max speed = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexShuttle = new(@"Shuttle number = (\d+)\s+Shuttle length = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexTemp = new(@"Temperature = ([\d.]+)", RegexOptions.Compiled);
+    private static readonly Regex RegexAngle = new(@"Angle = (\d+)\s*\|\s*Lenght = (\d+)\s*\|\s*position = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexFifoLifo = new(@"FIFO_LIFO = (FIFO|LIFO)", RegexOptions.Compiled);
+    private static readonly Regex RegexDist = new(@"Forwrd dist = (\d+)\s*\|\s*Revrs dist = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexPltDist = new(@"Forwrd plt dist = (\d+)\s*\|\s*Revrs plt dist = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexPltDet = new(@"Plt dtchk (F1|R1) = (\d+)\s*\|\s*Plt dtchk (F2|R2) = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexInChan = new(@"In channel:\s+(YES|NO)", RegexOptions.Compiled);
+    private static readonly Regex RegexLifter = new(@"Lifter UP:\s+(YES|NO)\s*\|\s*Lifter DOWN:\s+(YES|NO)", RegexOptions.Compiled);
+    private static readonly Regex RegexBumper = new(@"Bumper forward = (\d+)\s*\|\s*Bumper reverse = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexZeroOff = new(@"Zero point MPR = (\d+)\s+channel offset = (\d+)", RegexOptions.Compiled);
+    private static readonly Regex RegexWaitTime = new(@"Wait time on unload = (\d+)\s+Sec", RegexOptions.Compiled);
+
     private void ParseAndHandleResponse(string response)
     {
         var line = response.Trim();
+        if (string.IsNullOrEmpty(line)) return;
 
-        var cbMatch = System.Text.RegularExpressions.Regex.Match(line, @"^CB\s+(\d+)$");
-        if (cbMatch.Success && int.TryParse(cbMatch.Groups[1].Value, out int batteryPercentageScr))
-        {
-            Shuttle.BatteryPercentage = batteryPercentageScr;
-            Logger.LogInformation($"Parsed CB: Battery {batteryPercentageScr}%");
-            return;
-        }
+        // Optimization: Use efficient StartsWith checks before attempting expensive Regex matches.
+        // This avoids executing 17+ regexes for every log line that doesn't match a telemetry pattern.
 
-        var battMatch = System.Text.RegularExpressions.Regex.Match(line, @"Batt voltage = ([\d.]+)V Charge = (\d+)% limit = (\d+)%");
-        if (battMatch.Success)
+        if (line.StartsWith("CB "))
         {
-            if (double.TryParse(battMatch.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double batteryVoltage) &&
-                int.TryParse(battMatch.Groups[2].Value, out int batteryPercentage) &&
-                int.TryParse(battMatch.Groups[3].Value, out int batteryLimit))
+            var cbMatch = RegexCb.Match(line);
+            if (cbMatch.Success && int.TryParse(cbMatch.Groups[1].Value, out int batteryPercentageScr))
             {
-                Shuttle.BatteryVoltage = batteryVoltage;
-                Shuttle.BatteryPercentage = batteryPercentage;
-                Shuttle.BatteryLimit = batteryLimit;
-                Logger.LogInformation($"Parsed Batt: {batteryVoltage}V {batteryPercentage}% {batteryLimit}%");
+                Shuttle.BatteryPercentage = batteryPercentageScr;
+                Logger.LogInformation($"Parsed CB: Battery {batteryPercentageScr}%");
+                return;
             }
-            return;
         }
 
-        var inverseMatch = System.Text.RegularExpressions.Regex.Match(line, @"Inverse = (YES|NO)");
-        if (inverseMatch.Success)
+        if (line.StartsWith("Batt voltage = "))
         {
-            Shuttle.Inverse = inverseMatch.Groups[1].Value == "YES";
-            Logger.LogInformation($"Parsed Inverse: {Shuttle.Inverse}");
-            return;
-        }
-
-        var statusMatch = System.Text.RegularExpressions.Regex.Match(line, @"Status = (.+?)\s+\((\d+)\)");
-        if (statusMatch.Success)
-        {
-            Shuttle.CurrentStatus = statusMatch.Groups[1].Value.Trim();
-            if (int.TryParse(statusMatch.Groups[2].Value, out int statusCode))
+            var battMatch = RegexBatt.Match(line);
+            if (battMatch.Success)
             {
-                Shuttle.StatusCode = statusCode;
-            }
-            Logger.LogInformation($"Parsed Status: {Shuttle.CurrentStatus} ({Shuttle.StatusCode})");
-            return;
-        }
-
-        var mprMatch = System.Text.RegularExpressions.Regex.Match(line, @"MPR = (\d+)\s+max speed = (\d+)");
-        if (mprMatch.Success)
-        {
-            if (int.TryParse(mprMatch.Groups[1].Value, out int interPalletDistance) &&
-                int.TryParse(mprMatch.Groups[2].Value, out int maxSpeed))
-            {
-                Shuttle.InterPalleteDistance = interPalletDistance;
-                Shuttle.MaxSpeed = maxSpeed;
-                Logger.LogInformation($"Parsed MPR/MaxSp: MPR={interPalletDistance}, MaxSp={maxSpeed}");
-            }
-            return;
-        }
-
-        var shuttleMatch = System.Text.RegularExpressions.Regex.Match(line, @"Shuttle number = (\d+)\s+Shuttle length = (\d+)");
-        if (shuttleMatch.Success)
-        {
-            if (int.TryParse(shuttleMatch.Groups[1].Value, out int shuttleNumber) &&
-                int.TryParse(shuttleMatch.Groups[2].Value, out int shuttleLength))
-            {
-                Shuttle.ShuttleLength = shuttleLength;
-                Logger.LogInformation($"Parsed Shuttle: Num={Shuttle.ShuttleNumber}, Len={shuttleLength}");
-            }
-            return;
-        }
-
-        var tempMatch = System.Text.RegularExpressions.Regex.Match(line, @"Temperature = ([\d.]+)");
-        if (tempMatch.Success)
-        {
-            if (double.TryParse(tempMatch.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double temperature))
-            {
-                Shuttle.Temperature = temperature;
-                Logger.LogInformation($"Parsed Temp: {temperature}°C");
-            }
-            return;
-        }
-
-        var angleMatch = System.Text.RegularExpressions.Regex.Match(line, @"Angle = (\d+)\s*\|\s*Lenght = (\d+)\s*\|\s*position = (\d+)");
-        if (angleMatch.Success)
-        {
-            if (int.TryParse(angleMatch.Groups[1].Value, out int angle) &&
-                int.TryParse(angleMatch.Groups[2].Value, out int length) &&
-                int.TryParse(angleMatch.Groups[3].Value, out int position))
-            {
-                Shuttle.Angle = angle;
-                Shuttle.Length = length;
-                Shuttle.Position = position;
-                Logger.LogInformation($"Parsed Angle/Length/Pos: {angle}/{length}/{position}");
-            }
-            return;
-        }
-
-        var fifoLifoMatch = System.Text.RegularExpressions.Regex.Match(line, @"FIFO_LIFO = (FIFO|LIFO)");
-        if (fifoLifoMatch.Success)
-        {
-            Shuttle.FifoLifoMode = fifoLifoMatch.Groups[1].Value;
-            Logger.LogInformation($"Parsed FIFO/LIFO: {Shuttle.FifoLifoMode}");
-            return;
-        }
-
-        var distMatch = System.Text.RegularExpressions.Regex.Match(line, @"Forwrd dist = (\d+)\s*\|\s*Revrs dist = (\d+)");
-        if (distMatch.Success)
-        {
-            if (int.TryParse(distMatch.Groups[1].Value, out int forwardDist) &&
-                int.TryParse(distMatch.Groups[2].Value, out int reverseDist))
-            {
-                Shuttle.ForwardDistance = forwardDist;
-                Shuttle.ReverseDistance = reverseDist;
-                Logger.LogInformation($"Parsed Dist F/R: {forwardDist}/{reverseDist}");
-            }
-            return;
-        }
-
-        var pltDistMatch = System.Text.RegularExpressions.Regex.Match(line, @"Forwrd plt dist = (\d+)\s*\|\s*Revrs plt dist = (\d+)");
-        if (pltDistMatch.Success)
-        {
-            if (int.TryParse(pltDistMatch.Groups[1].Value, out int forwardPalletDist) &&
-                int.TryParse(pltDistMatch.Groups[2].Value, out int reversePalletDist))
-            {
-                Shuttle.ForwardPalletDistance = forwardPalletDist;
-                Shuttle.ReversePalletDistance = reversePalletDist;
-                Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDist}/{reversePalletDist}");
-            }
-            return;
-        }
-
-        var pltDetMatch = System.Text.RegularExpressions.Regex.Match(line, @"Plt dtchk (F1|R1) = (\d+)\s*\|\s*Plt dtchk (F2|R2) = (\d+)");
-        if (pltDetMatch.Success)
-        {
-            string side = pltDetMatch.Groups[1].Value.Substring(0, 1);
-            if (int.TryParse(pltDetMatch.Groups[2].Value, out int detector1) &&
-                int.TryParse(pltDetMatch.Groups[4].Value, out int detector2))
-            {
-                if (side == "F")
+                if (double.TryParse(battMatch.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double batteryVoltage) &&
+                    int.TryParse(battMatch.Groups[2].Value, out int batteryPercentage) &&
+                    int.TryParse(battMatch.Groups[3].Value, out int batteryLimit))
                 {
-                    Shuttle.PalletDetectorFront1 = detector1;
-                    Shuttle.PalletDetectorFront2 = detector2;
+                    Shuttle.BatteryVoltage = batteryVoltage;
+                    Shuttle.BatteryPercentage = batteryPercentage;
+                    Shuttle.BatteryLimit = batteryLimit;
+                    Logger.LogInformation($"Parsed Batt: {batteryVoltage}V {batteryPercentage}% {batteryLimit}%");
                 }
-                else if (side == "R")
+                return;
+            }
+        }
+
+        if (line.StartsWith("Inverse = "))
+        {
+            var inverseMatch = RegexInverse.Match(line);
+            if (inverseMatch.Success)
+            {
+                Shuttle.Inverse = inverseMatch.Groups[1].Value == "YES";
+                Logger.LogInformation($"Parsed Inverse: {Shuttle.Inverse}");
+                return;
+            }
+        }
+
+        if (line.StartsWith("Status = "))
+        {
+            var statusMatch = RegexStatus.Match(line);
+            if (statusMatch.Success)
+            {
+                Shuttle.CurrentStatus = statusMatch.Groups[1].Value.Trim();
+                if (int.TryParse(statusMatch.Groups[2].Value, out int statusCode))
                 {
-                    Shuttle.PalletDetectorRear1 = detector1;
-                    Shuttle.PalletDetectorRear2 = detector2;
+                    Shuttle.StatusCode = statusCode;
                 }
-                Logger.LogInformation($"Parsed Pallet Det {side}: {detector1}/{detector2}");
+                Logger.LogInformation($"Parsed Status: {Shuttle.CurrentStatus} ({Shuttle.StatusCode})");
+                return;
             }
-            return;
         }
 
-        var inChanMatch = System.Text.RegularExpressions.Regex.Match(line, @"In channel:\s+(YES|NO)");
-        if (inChanMatch.Success)
+        if (line.StartsWith("MPR = "))
         {
-            Shuttle.IsInChannel = inChanMatch.Groups[1].Value == "YES";
-            Logger.LogInformation($"Parsed In Channel: {Shuttle.IsInChannel}");
-            return;
-        }
-
-        var lifterMatch = System.Text.RegularExpressions.Regex.Match(line, @"Lifter UP:\s+(YES|NO)\s*\|\s*Lifter DOWN:\s+(YES|NO)");
-        if (lifterMatch.Success)
-        {
-            Shuttle.IsLifterUp = lifterMatch.Groups[1].Value == "YES";
-            Shuttle.IsLifterDown = lifterMatch.Groups[2].Value == "YES";
-            Logger.LogInformation($"Parsed Lifter: UP={Shuttle.IsLifterUp}, DOWN={Shuttle.IsLifterDown}");
-            return;
-        }
-
-        var bumperMatch = System.Text.RegularExpressions.Regex.Match(line, @"Bumper forward = (\d+)\s*\|\s*Bumper reverse = (\d+)");
-        if (bumperMatch.Success)
-        {
-            if (int.TryParse(bumperMatch.Groups[1].Value, out int bumperForward) &&
-                int.TryParse(bumperMatch.Groups[2].Value, out int bumperReverse))
+            var mprMatch = RegexMpr.Match(line);
+            if (mprMatch.Success)
             {
-                Shuttle.BumperForward = bumperForward;
-                Shuttle.BumperReverse = bumperReverse;
-                Logger.LogInformation($"Parsed Bumper F/R: {bumperForward}/{bumperReverse}");
+                if (int.TryParse(mprMatch.Groups[1].Value, out int interPalletDistance) &&
+                    int.TryParse(mprMatch.Groups[2].Value, out int maxSpeed))
+                {
+                    Shuttle.InterPalleteDistance = interPalletDistance;
+                    Shuttle.MaxSpeed = maxSpeed;
+                    Logger.LogInformation($"Parsed MPR/MaxSp: MPR={interPalletDistance}, MaxSp={maxSpeed}");
+                }
+                return;
             }
-            return;
         }
 
-        var zeroOffMatch = System.Text.RegularExpressions.Regex.Match(line, @"Zero point MPR = (\d+)\s+channel offset = (\d+)");
-        if (zeroOffMatch.Success)
+        if (line.StartsWith("Shuttle number = "))
         {
-            if (int.TryParse(zeroOffMatch.Groups[1].Value, out int zeroPointMpr) &&
-                int.TryParse(zeroOffMatch.Groups[2].Value, out int channelOffset))
+            var shuttleMatch = RegexShuttle.Match(line);
+            if (shuttleMatch.Success)
             {
-                Shuttle.ZeroPointMpr = zeroPointMpr;
-                Shuttle.ChannelOffset = channelOffset;
-                Logger.LogInformation($"Parsed Zero/Offset: {zeroPointMpr}/{channelOffset}");
+                if (int.TryParse(shuttleMatch.Groups[1].Value, out int shuttleNumber) &&
+                    int.TryParse(shuttleMatch.Groups[2].Value, out int shuttleLength))
+                {
+                    Shuttle.ShuttleLength = shuttleLength;
+                    Logger.LogInformation($"Parsed Shuttle: Num={Shuttle.ShuttleNumber}, Len={shuttleLength}");
+                }
+                return;
             }
-            return;
         }
 
-        var waitTimeMatch = System.Text.RegularExpressions.Regex.Match(line, @"Wait time on unload = (\d+)\s+Sec");
-        if (waitTimeMatch.Success)
+        if (line.StartsWith("Temperature = "))
         {
-            if (int.TryParse(waitTimeMatch.Groups[1].Value, out int waitTime))
+            var tempMatch = RegexTemp.Match(line);
+            if (tempMatch.Success)
             {
-                Shuttle.WaitTimeUnload = waitTime;
-                Logger.LogInformation($"Parsed Wait Time: {waitTime}s");
+                if (double.TryParse(tempMatch.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double temperature))
+                {
+                    Shuttle.Temperature = temperature;
+                    Logger.LogInformation($"Parsed Temp: {temperature}°C");
+                }
+                return;
             }
-            return;
+        }
+
+        if (line.StartsWith("Angle = "))
+        {
+            var angleMatch = RegexAngle.Match(line);
+            if (angleMatch.Success)
+            {
+                if (int.TryParse(angleMatch.Groups[1].Value, out int angle) &&
+                    int.TryParse(angleMatch.Groups[2].Value, out int length) &&
+                    int.TryParse(angleMatch.Groups[3].Value, out int position))
+                {
+                    Shuttle.Angle = angle;
+                    Shuttle.Length = length;
+                    Shuttle.Position = position;
+                    Logger.LogInformation($"Parsed Angle/Length/Pos: {angle}/{length}/{position}");
+                }
+                return;
+            }
+        }
+
+        if (line.StartsWith("FIFO_LIFO = "))
+        {
+            var fifoLifoMatch = RegexFifoLifo.Match(line);
+            if (fifoLifoMatch.Success)
+            {
+                Shuttle.FifoLifoMode = fifoLifoMatch.Groups[1].Value;
+                Logger.LogInformation($"Parsed FIFO/LIFO: {Shuttle.FifoLifoMode}");
+                return;
+            }
+        }
+
+        if (line.StartsWith("Forwrd dist = "))
+        {
+            var distMatch = RegexDist.Match(line);
+            if (distMatch.Success)
+            {
+                if (int.TryParse(distMatch.Groups[1].Value, out int forwardDist) &&
+                    int.TryParse(distMatch.Groups[2].Value, out int reverseDist))
+                {
+                    Shuttle.ForwardDistance = forwardDist;
+                    Shuttle.ReverseDistance = reverseDist;
+                    Logger.LogInformation($"Parsed Dist F/R: {forwardDist}/{reverseDist}");
+                }
+                return;
+            }
+        }
+
+        if (line.StartsWith("Forwrd plt dist = "))
+        {
+            var pltDistMatch = RegexPltDist.Match(line);
+            if (pltDistMatch.Success)
+            {
+                if (int.TryParse(pltDistMatch.Groups[1].Value, out int forwardPalletDist) &&
+                    int.TryParse(pltDistMatch.Groups[2].Value, out int reversePalletDist))
+                {
+                    Shuttle.ForwardPalletDistance = forwardPalletDist;
+                    Shuttle.ReversePalletDistance = reversePalletDist;
+                    Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDist}/{reversePalletDist}");
+                }
+                return;
+            }
+        }
+
+        if (line.StartsWith("Plt dtchk "))
+        {
+            var pltDetMatch = RegexPltDet.Match(line);
+            if (pltDetMatch.Success)
+            {
+                string side = pltDetMatch.Groups[1].Value.Substring(0, 1);
+                if (int.TryParse(pltDetMatch.Groups[2].Value, out int detector1) &&
+                    int.TryParse(pltDetMatch.Groups[4].Value, out int detector2))
+                {
+                    if (side == "F")
+                    {
+                        Shuttle.PalletDetectorFront1 = detector1;
+                        Shuttle.PalletDetectorFront2 = detector2;
+                    }
+                    else if (side == "R")
+                    {
+                        Shuttle.PalletDetectorRear1 = detector1;
+                        Shuttle.PalletDetectorRear2 = detector2;
+                    }
+                    Logger.LogInformation($"Parsed Pallet Det {side}: {detector1}/{detector2}");
+                }
+                return;
+            }
+        }
+
+        if (line.StartsWith("In channel:"))
+        {
+            var inChanMatch = RegexInChan.Match(line);
+            if (inChanMatch.Success)
+            {
+                Shuttle.IsInChannel = inChanMatch.Groups[1].Value == "YES";
+                Logger.LogInformation($"Parsed In Channel: {Shuttle.IsInChannel}");
+                return;
+            }
+        }
+
+        if (line.StartsWith("Lifter UP:"))
+        {
+            var lifterMatch = RegexLifter.Match(line);
+            if (lifterMatch.Success)
+            {
+                Shuttle.IsLifterUp = lifterMatch.Groups[1].Value == "YES";
+                Shuttle.IsLifterDown = lifterMatch.Groups[2].Value == "YES";
+                Logger.LogInformation($"Parsed Lifter: UP={Shuttle.IsLifterUp}, DOWN={Shuttle.IsLifterDown}");
+                return;
+            }
+        }
+
+        if (line.StartsWith("Bumper forward = "))
+        {
+            var bumperMatch = RegexBumper.Match(line);
+            if (bumperMatch.Success)
+            {
+                if (int.TryParse(bumperMatch.Groups[1].Value, out int bumperForward) &&
+                    int.TryParse(bumperMatch.Groups[2].Value, out int bumperReverse))
+                {
+                    Shuttle.BumperForward = bumperForward;
+                    Shuttle.BumperReverse = bumperReverse;
+                    Logger.LogInformation($"Parsed Bumper F/R: {bumperForward}/{bumperReverse}");
+                }
+                return;
+            }
+        }
+
+        if (line.StartsWith("Zero point MPR = "))
+        {
+            var zeroOffMatch = RegexZeroOff.Match(line);
+            if (zeroOffMatch.Success)
+            {
+                if (int.TryParse(zeroOffMatch.Groups[1].Value, out int zeroPointMpr) &&
+                    int.TryParse(zeroOffMatch.Groups[2].Value, out int channelOffset))
+                {
+                    Shuttle.ZeroPointMpr = zeroPointMpr;
+                    Shuttle.ChannelOffset = channelOffset;
+                    Logger.LogInformation($"Parsed Zero/Offset: {zeroPointMpr}/{channelOffset}");
+                }
+                return;
+            }
+        }
+
+        if (line.StartsWith("Wait time on unload = "))
+        {
+            var waitTimeMatch = RegexWaitTime.Match(line);
+            if (waitTimeMatch.Success)
+            {
+                if (int.TryParse(waitTimeMatch.Groups[1].Value, out int waitTime))
+                {
+                    Shuttle.WaitTimeUnload = waitTime;
+                    Logger.LogInformation($"Parsed Wait Time: {waitTime}s");
+                }
+                return;
+            }
         }
     }
 
-    private async void OnLogReceived(string ip, string log)
+    private DateTime _lastUiUpdate = DateTime.MinValue;
+    private const int UiUpdateThrottleMs = 100;
+    private readonly Channel<string> _logChannel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+    private Task? _logProcessorTask;
+
+    private void OnLogReceived(string ip, string log)
     {
         if (!IsEventForThisShuttle(ip)) return;
+        _logChannel.Writer.TryWrite(log);
+    }
 
-        File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        await InvokeAsync(() =>
+    private async Task StartLogProcessorAsync(CancellationToken ct)
+    {
+        try
         {
-            ParseAndHandleResponse(log);
-            if (log.StartsWith("-----------------------------------------------"))
+            while (await _logChannel.Reader.WaitToReadAsync(ct))
             {
-                if (!_inStatusBlock)
+                while (_logChannel.Reader.TryRead(out var log))
                 {
-                    _inStatusBlock = true;
-                    _statusBlockLines.Clear();
-                }
-                else
-                {
-                    _inStatusBlock = false;
-                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
+                    // Optimization: Use synchronous write in a background task to ensure order and avoid overhead of many small async tasks.
+                    // This is safe because it's running on a background worker thread.
+                    try
+                    {
+                        File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to write to log file");
+                    }
+
+                    await InvokeAsync(async () =>
+                    {
+                        ParseAndHandleResponse(log);
+                        if (log.StartsWith("-----------------------------------------------"))
+                        {
+                            if (!_inStatusBlock)
+                            {
+                                _inStatusBlock = true;
+                                _statusBlockLines.Clear();
+                            }
+                            else
+                            {
+                                _inStatusBlock = false;
+                                Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
+                            }
+                        }
+                        else if (_inStatusBlock) _statusBlockLines.Add(log);
+
+                        // Optimization: Throttle UI updates (StateHasChanged and Scrolling) to prevent UI thread saturation during log storms.
+                        // We also check if there's no more logs pending to ensure the "trailing edge" (last log) is always rendered.
+                        bool hasMoreLogs = _logChannel.Reader.Count > 0;
+                        bool shouldUpdate = (DateTime.Now - _lastUiUpdate).TotalMilliseconds > UiUpdateThrottleMs || !hasMoreLogs;
+
+                        if (log.Contains("##HEARTBEAT##")) LogToTerminal($"[HEARTBEAT] {log}\n", shouldUpdate);
+                        else
+                        {
+                            var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
+                            LogToTerminal($"[{DateTime.Now}] {cleanLog}\n", shouldUpdate);
+                        }
+
+                        if (shouldUpdate)
+                        {
+                            _lastUiUpdate = DateTime.Now;
+                        }
+                    });
                 }
             }
-            else if (_inStatusBlock) _statusBlockLines.Add(log);
-            if (log.Contains("##HEARTBEAT##")) LogToTerminal($"[HEARTBEAT] {log}\n");
-            else
-            {
-                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                LogToTerminal($"[{DateTime.Now}] {cleanLog}\n");
-            }
-            StateHasChanged();
-        });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error in log processor loop");
+        }
     }
 
     private async Task SendCommandAsync(string command, string description = "")
@@ -1033,7 +1156,7 @@
         StateHasChanged();
     }
 
-    private void LogToTerminal(string message)
+    private void LogToTerminal(string message, bool shouldUpdate = true)
     {
         Shuttle.AddTerminalMessage(message);
 
@@ -1042,8 +1165,11 @@
             Shuttle.RemoveTerminalMessage();
         }
 
-        StateHasChanged();
-        _ = ScrollTerminalToBottomAsync();
+        if (shouldUpdate)
+        {
+            StateHasChanged();
+            _ = ScrollTerminalToBottomAsync();
+        }
     }
 
     private async Task ScrollTerminalToBottomAsync()
@@ -1102,6 +1228,16 @@
             Logger.LogInformation("Дисконнект компонента для IP: {IpAddress}", Shuttle?.IPAddress ?? "null");
 
             _componentCts?.Cancel();
+
+            if (_logProcessorTask != null)
+            {
+                try
+                {
+                    await _logProcessorTask;
+                }
+                catch (OperationCanceledException) { }
+            }
+
             _componentCts?.Dispose();
 
             Logger.LogInformation("--- Component DISPOSE: Unsubscribing from events for {IP}", Shuttle?.IPAddress ?? "null");

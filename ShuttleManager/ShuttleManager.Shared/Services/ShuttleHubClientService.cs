@@ -43,40 +43,37 @@ namespace ShuttleManager.Shared.Services
         public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000)
         {
             var foundDevices = new List<IPAddress>();
-            var tasks = new List<Task>();
+            var ipIndices = Enumerable.Range(startIp, endIp - startIp + 1);
 
-            //перебор подсети
-            for (int i = startIp; i <= endIp; i++)
+            // Optimization: Use Parallel.ForEachAsync with controlled concurrency to prevent socket exhaustion
+            // and reduce thread pool pressure compared to spawning hundreds of individual tasks at once.
+            await Parallel.ForEachAsync(ipIndices, new ParallelOptions { MaxDegreeOfParallelism = 32 }, async (i, token) =>
             {
-                string ip = $"{baseIp}.{i}";
-                var task = Task.Run(async () =>
+                string ipString = $"{baseIp}.{i}";
+                try
                 {
-                    try
-                    {
-                        using var client = new TcpClient();
-                        var cts = new CancellationTokenSource(timeoutMs);
-                        try
-                        {
-                            await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                            if (client.Connected)
-                            {
-                                Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                                lock (foundDevices)
-                                    foundDevices.Add(IPAddress.Parse(ip));
-                            }
-                        }
-                        catch (OperationCanceledException)
-                        {
-                        }
-                    }
-                    catch (SocketException)
-                    {
-                    }
-                });
-                tasks.Add(task);
-            }
+                    using var client = new TcpClient();
+                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    cts.CancelAfter(timeoutMs);
 
-            await Task.WhenAll(tasks);
+                    await client.ConnectAsync(IPAddress.Parse(ipString), port, cts.Token);
+                    if (client.Connected)
+                    {
+                        Debug.WriteLine($"[ScanNetwork] Device found at {ipString}");
+                        lock (foundDevices)
+                        {
+                            foundDevices.Add(IPAddress.Parse(ipString));
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (SocketException) { }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ScanNetwork] Unexpected error scanning {ipString}: {ex.Message}");
+                }
+            });
+
             return foundDevices;
         }
 
@@ -282,8 +279,8 @@ namespace ShuttleManager.Shared.Services
 
             try
             {
-                await connection.Writer.WriteLineAsync(command);
-
+                // Optimization: Removed redundant double-send of the command.
+                // Previously, WriteLineAsync was called twice, doubling network traffic and potential side effects.
                 var cts = new CancellationTokenSource(timeoutMs);
                 connection.ReceiveBuffer.SetLength(0);
                 await connection.Writer.WriteLineAsync(command);
