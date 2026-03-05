@@ -1,80 +1,79 @@
 ﻿@using System.Globalization
 @using ShuttleManager.Shared.Models
 
+<div class="card-body p-2">
+    <div class="stats-grid">
+        <div class="stat-item">
+            <div class="stat-title">Рабочее время</div>
+            <div class="stat-value">@FormatDate(Shuttle.LastActivity)</div>
+        </div>
 
-    <div class="card-body p-2">
-        <div class="stats-grid">
-            <div class="stat-item">
-                <div class="stat-title">Рабочее время</div>
-                <div class="stat-value">@FormatDate(Shuttle.LastActivity)</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Проходимость</div>
+            <div class="stat-value">@Shuttle.TotalDist</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Проходимость</div>
-                <div class="stat-value">@Shuttle.TotalDist</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Загрузки</div>
+            <div class="stat-value">@Shuttle.LoadCounter</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Загрузки</div>
-                <div class="stat-value">@Shuttle.LoadCounter</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Выгрузки</div>
+            <div class="stat-value">@Shuttle.UnloadCounter</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Выгрузки</div>
-                <div class="stat-value">@Shuttle.UnloadCounter</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Уплотнений</div>
+            <div class="stat-value">@Shuttle.CompactCounter</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Уплотнений</div>
-                <div class="stat-value">@Shuttle.CompactCounter</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Подъём</div>
+            <div class="stat-value">@Shuttle.LiftUpCounter</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Подъём</div>
-                <div class="stat-value">@Shuttle.LiftUpCounter</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Спуск</div>
+            <div class="stat-value">@Shuttle.LiftDownCounter</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Спуск</div>
-                <div class="stat-value">@Shuttle.LiftDownCounter</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Паллетов за время</div>
+            <div class="stat-value">@Shuttle.LifetimePalletsDetected</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Паллетов за время</div>
-                <div class="stat-value">@Shuttle.LifetimePalletsDetected</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Время работы</div>
+            <div class="stat-value">@Shuttle.TotalUptimeMinutes</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Время работы</div>
-                <div class="stat-value">@Shuttle.TotalUptimeMinutes</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Проблем мотора</div>
+            <div class="stat-value">@Shuttle.MotorStallCount</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Проблем мотора</div>
-                <div class="stat-value">@Shuttle.MotorStallCount</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Перегрузок подъёма</div>
+            <div class="stat-value">@Shuttle.LifterOverloadCount</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Перегрузок подъёма</div>
-                <div class="stat-value">@Shuttle.LifterOverloadCount</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Столкновений</div>
+            <div class="stat-value">@Shuttle.CrashCount</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Столкновений</div>
-                <div class="stat-value">@Shuttle.CrashCount</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Сбои системы</div>
+            <div class="stat-value">@Shuttle.WatchdogResets</div>
+        </div>
 
-            <div class="stat-item">
-                <div class="stat-title">Сбои системы</div>
-                <div class="stat-value">@Shuttle.WatchdogResets</div>
-            </div>
-
-            <div class="stat-item">
-                <div class="stat-title">Низкий заряд батареи</div>
-                <div class="stat-value">@Shuttle.LowBatteryEvents</div>
-            </div>
+        <div class="stat-item">
+            <div class="stat-title">Низкий заряд батареи</div>
+            <div class="stat-value">@Shuttle.LowBatteryEvents</div>
         </div>
     </div>
+</div>
 
 <style>
     .shuttle-stats {
