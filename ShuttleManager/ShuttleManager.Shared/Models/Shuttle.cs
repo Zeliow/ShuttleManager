@@ -91,11 +91,11 @@ public class Shuttle
         }
     }
 
-    public List<string> GetTerminalMessages()
+    public IReadOnlyList<string> GetTerminalMessages()
     {
         lock (_lock)
         {
-            return [.. _terminalMessages];
+            return _terminalMessages;
         }
     }
 }
