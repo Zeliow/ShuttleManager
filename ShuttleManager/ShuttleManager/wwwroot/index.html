@@ -28,10 +28,18 @@
             const element = document.getElementById(elementId);
             if (!element) return;
 
-            // Автоматически скроллим только если пользователь уже near the bottom
-            const isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 100;
+            // Увеличиваем порог с 100 до 500 или даже больше, чтобы точнее определять "внизу"
+            const isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 300;
+            console.log(`Scroll check: ${element.scrollHeight} - ${element.scrollTop} - ${element.clientHeight} = ${element.scrollHeight - element.scrollTop - element.clientHeight}, isNearBottom: ${isNearBottom}`);
+
             if (isNearBottom) {
-                element.scrollTop = element.scrollHeight;
+                // Откладываем скролл, чтобы дождаться полного рендеринга
+                setTimeout(() => {
+                    const finalElement = document.getElementById(elementId);
+                    if (finalElement) {
+                        finalElement.scrollTop = finalElement.scrollHeight;
+                    }
+                }, 10);
             }
         }
 
