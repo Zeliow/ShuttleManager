@@ -9,19 +9,13 @@ public class Shuttle
     public string ShuttleNumber { get; set; } = string.Empty;
     public string? IPAddress { get; set; } = string.Empty;
     public int BatteryPercentage { get; set; } = 0;
-    public bool IsAutoLogging { get; set; }
-    public string? CurrentCommand { get; set; }
     public bool? Inverse { get; set; }
-    public TcpClient? Client { get; }
-    public bool LoggingStatus { get; set; }
-    public bool IsFormOpened { get; set; }
     public int MaxSpeed { get; set; }
     public int InterPalleteDistance { get; set; }
     public int ShuttleLength { get; set; }
     public int BatteryLimit { get; set; }
     public double BatteryVoltage { get; set; } = 0.0;
     public bool IsConnected { get; set; } = false;
-    public string? LastReceivedData { get; set; }
     public string CurrentStatus { get; set; } = "Неизвестно";
     public int ErrorCode { get; set; } = 0;
     public int WarningCode { get; set; } = 0;
@@ -50,8 +44,6 @@ public class Shuttle
     public int ChannelOffset { get; set; } = 0;
     public int StatusCode { get; set; } = 0;
     public int WaitTimeUnload { get; set; } = 0;
-    public string ConnectionStatus { get; set; } = "Offline";
-    public DateTime LastConnectionCheck { get; set; } = DateTime.MinValue;
 
     public string FullStatusBlock { get; set; } = string.Empty;
     private List<string> _terminalMessages = [];
@@ -91,11 +83,11 @@ public class Shuttle
         }
     }
 
-    public List<string> GetTerminalMessages()
+    public IReadOnlyList<string> GetTerminalMessages()
     {
         lock (_lock)
         {
-            return [.. _terminalMessages];
+            return _terminalMessages;
         }
     }
 }

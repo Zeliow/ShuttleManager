@@ -266,6 +266,7 @@ dotnet_diagnostic.SA1310.severity = none
 dotnet_diagnostic.SA1516.severity = none
 dotnet_diagnostic.SA1204.severity = none
 dotnet_diagnostic.SA1401.severity = none
+dotnet_diagnostic.SA1202.severity = none
 
 # another platform include off analyzers
 dotnet_code_quality.enable_platform_analyzer_on_pre_net5_target = false
