@@ -46,40 +46,40 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
     {
         var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        var ipRange = Enumerable.Range(_startRange, _endRange - _startRange + 1);
 
-        //перебор подсети
-        for (int i = _startRange; i <= _endRange; i++)
+        // BOLT: Use Parallel.ForEachAsync with controlled MaxDegreeOfParallelism to prevent socket exhaustion
+        // and reduce thread pool pressure during network scanning.
+        await Parallel.ForEachAsync(ipRange, new ParallelOptions { MaxDegreeOfParallelism = 32 }, async (i, ct) =>
         {
-            string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            var ipString = $"{baseIp}.{i}";
+            if (!IPAddress.TryParse(ipString, out var ip)) return;
+
+            try
             {
+                using var client = new TcpClient();
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(timeoutMs);
+
                 try
                 {
-                    using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
+                    await client.ConnectAsync(ip, port, cts.Token);
+                    if (client.Connected)
                     {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
-                        {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
+                        Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
+                        lock (foundDevices)
+                            foundDevices.Add(ip);
                     }
                 }
-                catch (SocketException)
+                catch (OperationCanceledException)
                 {
                 }
-            });
-            tasks.Add(task);
-        }
+            }
+            catch (SocketException)
+            {
+            }
+        });
 
-        await Task.WhenAll(tasks);
         return foundDevices;
     }
 
