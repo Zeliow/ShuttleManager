@@ -46,40 +46,49 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
     {
         var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        var range = Enumerable.Range(_startRange, _endRange - _startRange + 1);
 
-        //перебор подсети
-        for (int i = _startRange; i <= _endRange; i++)
+        // Use Parallel.ForEachAsync with controlled parallelism to prevent socket exhaustion
+        // and ensure proper disposal of CancellationTokenSource to avoid timer leaks.
+        var parallelOptions = new ParallelOptions
         {
-            string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            MaxDegreeOfParallelism = 32,
+        };
+
+        await Parallel.ForEachAsync(range, parallelOptions, async (i, ct) =>
+        {
+            string ipString = $"{baseIp}.{i}";
+            if (IPAddress.TryParse(ipString, out var ip))
             {
                 try
                 {
                     using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
+                    using var cts = new CancellationTokenSource(timeoutMs);
+                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, ct);
+
+                    await client.ConnectAsync(ip, port, linkedCts.Token);
+                    if (client.Connected)
                     {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
+                        Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
+                        lock (foundDevices)
                         {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
+                            foundDevices.Add(ip);
                         }
                     }
-                    catch (OperationCanceledException)
-                    {
-                    }
+                }
+                catch (OperationCanceledException)
+                {
                 }
                 catch (SocketException)
                 {
                 }
-            });
-            tasks.Add(task);
-        }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[Scan] Error scanning {ipString}: {ex.Message}");
+                }
+            }
+        });
 
-        await Task.WhenAll(tasks);
         return foundDevices;
     }
 
