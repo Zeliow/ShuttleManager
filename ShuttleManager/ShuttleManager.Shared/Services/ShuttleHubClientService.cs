@@ -38,6 +38,8 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         public string IpAddress { get; set; } = string.Empty;
 
         public readonly MemoryStream ReceiveBuffer = new();
+
+        public readonly byte[] ReadBuffer = new byte[512];
     }
 
     private int _startRange = 130;
@@ -46,40 +48,37 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
     {
         var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        var range = Enumerable.Range(_startRange, _endRange - _startRange + 1);
 
-        //перебор подсети
-        for (int i = _startRange; i <= _endRange; i++)
+        // Используем Parallel.ForEachAsync для эффективного сканирования сети с ограничением параллелизма.
+        // Это предотвращает исчерпание сокетов и чрезмерную нагрузку на пул потоков.
+        await Parallel.ForEachAsync(range, new ParallelOptions { MaxDegreeOfParallelism = 32 }, async (i, token) =>
         {
             string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            try
             {
+                using var client = new TcpClient();
+                using var cts = new CancellationTokenSource(timeoutMs);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, token);
                 try
                 {
-                    using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
+                    await client.ConnectAsync(IPAddress.Parse(ip), port, linkedCts.Token);
+                    if (client.Connected)
                     {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
-                        {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
+                        Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
+                        lock (foundDevices)
+                            foundDevices.Add(IPAddress.Parse(ip));
                     }
                 }
-                catch (SocketException)
+                catch (OperationCanceledException)
                 {
                 }
-            });
-            tasks.Add(task);
-        }
+            }
+            catch (SocketException)
+            {
+            }
+        });
 
-        await Task.WhenAll(tasks);
         return foundDevices;
     }
 
@@ -187,8 +186,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             return "start stream!";
         }
 
-        const int BufferSize = 512;
-        byte[] readBuffer = new byte[BufferSize];
+        byte[] readBuffer = connection.ReadBuffer;
 
         while (true)
         {
@@ -285,8 +283,6 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
         try
         {
-            await connection.Writer.WriteLineAsync(command);
-
             var cts = new CancellationTokenSource(timeoutMs);
             connection.ReceiveBuffer.SetLength(0);
             await connection.Writer.WriteLineAsync(command);

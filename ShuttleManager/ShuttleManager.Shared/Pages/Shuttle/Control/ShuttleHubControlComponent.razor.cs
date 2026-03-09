@@ -195,6 +195,8 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         }
         finally
         {
+            _otaCts?.Dispose();
+            _otaCts = null;
             _isOtaRunning = false;
             StateHasChanged();
         }
@@ -553,50 +555,57 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
                     bool stateChanged = false;
-                    await InvokeAsync(() =>
-                    {
-                        while (_logChannel.Reader.TryRead(out var log))
-                        {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
-                            {
-                                if (!_inStatusBlock)
-                                {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
-                                }
-                                else
-                                {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                                }
-                            }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
+                    var batchLines = new List<string>();
 
-                            if (log.Contains("##HEARTBEAT##"))
+                    // Обрабатываем логи вне InvokeAsync для снижения нагрузки на UI-поток
+                    while (_logChannel.Reader.TryRead(out var log))
+                    {
+                        ParseAndHandleResponse(log);
+                        if (log.StartsWith("-----------------------------------------------"))
+                        {
+                            if (!_inStatusBlock)
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                _inStatusBlock = true;
+                                _statusBlockLines.Clear();
                             }
                             else
                             {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                _inStatusBlock = false;
+                                Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
                             }
-
-                            stateChanged = true;
                         }
-
-                        if (stateChanged)
+                        else if (_inStatusBlock)
                         {
-                            StateHasChanged();
+                            _statusBlockLines.Add(log);
                         }
-                    });
+
+                        if (log.Contains("##HEARTBEAT##"))
+                        {
+                            batchLines.Add($"[HEARTBEAT] {log}\n");
+                        }
+                        else
+                        {
+                            // Оптимизация поиска ##TELEMETRY##: используем один IndexOf вместо Contains + IndexOf
+                            int telemetryIndex = log.IndexOf("##TELEMETRY##");
+                            var cleanLog = telemetryIndex >= 0 ? log.Substring(0, telemetryIndex) : log;
+                            batchLines.Add($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                        }
+
+                        stateChanged = true;
+                    }
 
                     if (stateChanged)
                     {
+                        await InvokeAsync(() =>
+                        {
+                            foreach (var line in batchLines)
+                            {
+                                LogToTerminalInternal(line);
+                            }
+
+                            StateHasChanged();
+                        });
+
                         _ = ScrollTerminalToBottomAsync();
                     }
 
