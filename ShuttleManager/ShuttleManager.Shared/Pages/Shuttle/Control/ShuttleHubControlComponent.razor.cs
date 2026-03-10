@@ -195,6 +195,8 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         }
         finally
         {
+            _otaCts?.Dispose();
+            _otaCts = null;
             _isOtaRunning = false;
             StateHasChanged();
         }
@@ -264,11 +266,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
             {
                 Shuttle.BatteryPercentage = batteryPercentageScr;
                 Logger.LogInformation($"Parsed CB: Battery {batteryPercentageScr}%");
-                return;
             }
         }
-
-        if (line.StartsWith("Batt"))
+        else if (line.StartsWith("Batt"))
         {
             var match = BattRegex().Match(line);
             if (match.Success)
@@ -282,23 +282,18 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.BatteryLimit = batteryLimit;
                     Logger.LogInformation($"Parsed Batt: {batteryVoltage}V {batteryPercentage}% {batteryLimit}%");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Inverse"))
+        else if (line.StartsWith("Inverse"))
         {
             var match = InverseRegex().Match(line);
             if (match.Success)
             {
                 Shuttle.Inverse = match.Groups[1].Value == "YES";
                 Logger.LogInformation($"Parsed Inverse: {Shuttle.Inverse}");
-                return;
             }
         }
-
-        if (line.StartsWith("Status"))
+        else if (line.StartsWith("Status"))
         {
             var match = StatusRegex().Match(line);
             if (match.Success)
@@ -310,11 +305,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
 
                 Logger.LogInformation($"Parsed Status: {Shuttle.CurrentStatus} ({Shuttle.StatusCode})");
-                return;
             }
         }
-
-        if (line.StartsWith("MPR"))
+        else if (line.StartsWith("MPR"))
         {
             var match = MprRegex().Match(line);
             if (match.Success)
@@ -326,12 +319,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.MaxSpeed = maxSpeed;
                     Logger.LogInformation($"Parsed MPR/MaxSp: MPR={interPalletDistance}, MaxSp={maxSpeed}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Shuttle number"))
+        else if (line.StartsWith("Shuttle number"))
         {
             var match = ShuttleInfoRegex().Match(line);
             if (match.Success)
@@ -342,12 +332,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.ShuttleLength = shuttleLength;
                     Logger.LogInformation($"Parsed Shuttle: Num={Shuttle.ShuttleNumber}, Len={shuttleLength}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Temperature"))
+        else if (line.StartsWith("Temperature"))
         {
             var match = TempRegex().Match(line);
             if (match.Success)
@@ -357,12 +344,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.Temperature = temperature;
                     Logger.LogInformation($"Parsed Temp: {temperature}°C");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Angle"))
+        else if (line.StartsWith("Angle"))
         {
             var match = AngleRegex().Match(line);
             if (match.Success)
@@ -376,23 +360,18 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.Position = position;
                     Logger.LogInformation($"Parsed Angle/Length/Pos: {angle}/{length}/{position}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("FIFO_LIFO"))
+        else if (line.StartsWith("FIFO_LIFO"))
         {
             var match = FifoLifoRegex().Match(line);
             if (match.Success)
             {
                 Shuttle.FifoLifoMode = match.Groups[1].Value;
                 Logger.LogInformation($"Parsed FIFO/LIFO: {Shuttle.FifoLifoMode}");
-                return;
             }
         }
-
-        if (line.StartsWith("Forwrd dist"))
+        else if (line.StartsWith("Forwrd dist"))
         {
             var match = DistRegex().Match(line);
             if (match.Success)
@@ -404,12 +383,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.ReverseDistance = reverseDist;
                     Logger.LogInformation($"Parsed Dist F/R: {forwardDist}/{reverseDist}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Forwrd plt dist"))
+        else if (line.StartsWith("Forwrd plt dist"))
         {
             var match = PltDistRegex().Match(line);
             if (match.Success)
@@ -421,12 +397,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.ReversePalletDistance = reversePalletDist;
                     Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDist}/{reversePalletDist}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Plt dtchk"))
+        else if (line.StartsWith("Plt dtchk"))
         {
             var match = PltDetRegex().Match(line);
             if (match.Success)
@@ -448,24 +421,18 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
 
                     Logger.LogInformation($"Parsed Pallet Det {side}: {detector1}/{detector2}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("In channel"))
+        else if (line.StartsWith("In channel"))
         {
             var match = InChanRegex().Match(line);
             if (match.Success)
             {
                 Shuttle.IsInChannel = match.Groups[1].Value == "YES";
                 Logger.LogInformation($"Parsed In Channel: {Shuttle.IsInChannel}");
-
-                return;
             }
         }
-
-        if (line.StartsWith("Lifter"))
+        else if (line.StartsWith("Lifter"))
         {
             var match = LifterRegex().Match(line);
             if (match.Success)
@@ -473,12 +440,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Shuttle.IsLifterUp = match.Groups[1].Value == "YES";
                 Shuttle.IsLifterDown = match.Groups[2].Value == "YES";
                 Logger.LogInformation($"Parsed Lifter: UP={Shuttle.IsLifterUp}, DOWN={Shuttle.IsLifterDown}");
-
-                return;
             }
         }
-
-        if (line.StartsWith("Bumper"))
+        else if (line.StartsWith("Bumper"))
         {
             var match = BumperRegex().Match(line);
             if (match.Success)
@@ -490,12 +454,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.BumperReverse = bumperReverse;
                     Logger.LogInformation($"Parsed Bumper F/R: {bumperForward}/{bumperReverse}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Zero point MPR"))
+        else if (line.StartsWith("Zero point MPR"))
         {
             var match = ZeroOffRegex().Match(line);
             if (match.Success)
@@ -507,12 +468,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.ChannelOffset = channelOffset;
                     Logger.LogInformation($"Parsed Zero/Offset: {zeroPointMpr}/{channelOffset}");
                 }
-
-                return;
             }
         }
-
-        if (line.StartsWith("Wait time on unload"))
+        else if (line.StartsWith("Wait time on unload"))
         {
             var match = WaitTimeRegex().Match(line);
             if (match.Success)
@@ -522,8 +480,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                     Shuttle.WaitTimeUnload = waitTime;
                     Logger.LogInformation($"Parsed Wait Time: {waitTime}s");
                 }
-
-                return;
             }
         }
     }

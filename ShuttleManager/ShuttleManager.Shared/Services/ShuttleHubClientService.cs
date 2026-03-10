@@ -38,6 +38,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         public string IpAddress { get; set; } = string.Empty;
 
         public readonly MemoryStream ReceiveBuffer = new();
+        public readonly byte[] ReadBuffer = new byte[512];
     }
 
     private int _startRange = 130;
@@ -187,8 +188,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             return "start stream!";
         }
 
-        const int BufferSize = 512;
-        byte[] readBuffer = new byte[BufferSize];
+        byte[] readBuffer = connection.ReadBuffer;
 
         while (true)
         {
@@ -285,8 +285,6 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
         try
         {
-            await connection.Writer.WriteLineAsync(command);
-
             var cts = new CancellationTokenSource(timeoutMs);
             connection.ReceiveBuffer.SetLength(0);
             await connection.Writer.WriteLineAsync(command);
