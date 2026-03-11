@@ -502,57 +502,66 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
 
     private async Task ProcessLogsLoopAsync()
     {
+        var batchMessages = new List<string>();
         try
         {
             while (!_componentCts.Token.IsCancellationRequested)
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
-                    await InvokeAsync(() =>
-                    {
-                        while (_logChannel.Reader.TryRead(out var log))
-                        {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
-                            {
-                                if (!_inStatusBlock)
-                                {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
-                                }
-                                else
-                                {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                                }
-                            }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
+                    batchMessages.Clear();
+                    string? newFullStatusBlock = null;
 
-                            if (log.Contains("##HEARTBEAT##"))
+                    while (_logChannel.Reader.TryRead(out var log))
+                    {
+                        ParseAndHandleResponse(log);
+                        if (log.StartsWith("-----------------------------------------------"))
+                        {
+                            if (!_inStatusBlock)
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                _inStatusBlock = true;
+                                _statusBlockLines.Clear();
                             }
                             else
                             {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                _inStatusBlock = false;
+                                newFullStatusBlock = string.Join("\n", _statusBlockLines);
+                            }
+                        }
+                        else if (_inStatusBlock)
+                        {
+                            _statusBlockLines.Add(log);
+                        }
+
+                        if (log.Contains("##HEARTBEAT##"))
+                        {
+                            batchMessages.Add($"[HEARTBEAT] {log}\n");
+                        }
+                        else
+                        {
+                            int telemetryIndex = log.IndexOf("##TELEMETRY##");
+                            var cleanLog = telemetryIndex >= 0 ? log.Substring(0, telemetryIndex) : log;
+                            batchMessages.Add($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                        }
+                    }
+
+                    if (batchMessages.Count > 0 || newFullStatusBlock != null)
+                    {
+                        await InvokeAsync(() =>
+                        {
+                            if (newFullStatusBlock != null)
+                            {
+                                Shuttle.FullStatusBlock = newFullStatusBlock;
                             }
 
-                            stateChanged = true;
-                        }
+                            if (batchMessages.Count > 0)
+                            {
+                                Shuttle.AddRangeTerminalMessages(batchMessages);
+                            }
 
-                        if (stateChanged)
-                        {
                             StateHasChanged();
-                        }
-                    });
+                        });
 
-                    if (stateChanged)
-                    {
                         _ = ScrollTerminalToBottomAsync();
                     }
 
@@ -572,11 +581,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminalInternal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
     }
 
     private async Task SendCommandAsync(string command, string description = "")
@@ -808,12 +812,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
-
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }

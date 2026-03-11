@@ -1,4 +1,4 @@
-﻿using System.Net.Sockets;
+using System.Net.Sockets;
 
 namespace ShuttleManager.Shared.Models;
 
@@ -48,11 +48,32 @@ public class Shuttle
     public string FullStatusBlock { get; set; } = string.Empty;
     private List<string> _terminalMessages = [];
 
+    private const int MaxTerminalMessages = 900;
+    private const int TargetTerminalMessages = 500;
+
     public void AddTerminalMessage(string message)
     {
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            EnforceTerminalLimitInternal();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            EnforceTerminalLimitInternal();
+        }
+    }
+
+    private void EnforceTerminalLimitInternal()
+    {
+        if (_terminalMessages.Count > MaxTerminalMessages)
+        {
+            _terminalMessages.RemoveRange(0, _terminalMessages.Count - TargetTerminalMessages);
         }
     }
 
@@ -68,7 +89,7 @@ public class Shuttle
     {
         lock (_lock)
         {
-            _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
+            EnforceTerminalLimitInternal();
         }
     }
 
