@@ -107,6 +107,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             return null;
         }
 
+        //механизм подключения к шаттлу 
         public async Task ConnectToShuttleAsync(string ipAddress, int port)
         {
             lock (_lock) { } // Keeping existing lock pattern
@@ -115,8 +116,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             try
             {
-                Debug.WriteLine("Старт TCP контакта для прямого подключнения");
-                OnLogReceived(connection.IpAddress, new RawLogMessage { Level = LogLevel.LOG_INFO, Text = $"Connecting to {ipAddress}:{port}..." });
+                Debug.WriteLine("Старт TCP контакта для прямого подключнения");             
 
                 connection.TcpClient = new TcpClient();
                 await connection.TcpClient.ConnectAsync(ipAddress, port);
@@ -125,16 +125,15 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
                 connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 60);
                 connection.TcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
-
                 connection.NetworkStream = connection.TcpClient.GetStream();
 
                 // Initialize the connection with a default shuttle ID before receiving the first heartbeat
                 connection.ShuttleId = -1; // Will be updated when first heartbeat arrives
-
                 OnConnected(ipAddress, connection.ShuttleId);
 
                 connection.ReceiveCts = new CancellationTokenSource();
-                connection.ReceiveTask = Task.Run(async () => await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
+                connection.ReceiveTask = Task.Run(async () => 
+                    await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
 
                 lock (_lock)
                 {
@@ -144,7 +143,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ShuttleHubClientService] Ошибка подключения к {ipAddress}: {ex.Message}");
-                OnLogReceived(ipAddress, new RawLogMessage { Level = LogLevel.LOG_ERROR, Text = $"Connection failed: {ex.Message}" });
                 await InternalDisconnectAsync(ipAddress);
             }
         }
