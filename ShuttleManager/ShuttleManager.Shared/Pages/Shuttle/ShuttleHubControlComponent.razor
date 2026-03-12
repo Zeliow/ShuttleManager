@@ -572,14 +572,11 @@
     {
         try
         {
-            if (!Directory.Exists($"{AppContext.BaseDirectory}/logs"))
-            {
-                Directory.CreateDirectory($"{AppContext.BaseDirectory}/logs");
-            }
+            Directory.CreateDirectory(
+            Path.Combine(AppContext.BaseDirectory, "logs"));
             HubClientService.Connected += OnHubConnected;
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.LogReceived += OnLogReceived;
-            pathLogShuttle = Path.Combine($"{AppContext.BaseDirectory}/logs", $"Shuttle_Log_Number_{DateTime.Now.Day}_{DateTime.Now.Month}_{DateTime.Now.Year}_{Shuttle.IPAddress}.txt");
             Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
             StateHasChanged();
         }
@@ -706,24 +703,54 @@
         });
     }
 
+    private static string GetMessageFolder(ShuttleMessageBase msg) =>
+        msg switch
+        {
+            TelemetryMessage => "telemetry",
+            SensorMessage => "sensors",
+            StatsMessage => "stats",
+            RawLogMessage => "raw",
+            ConfigMessage => "config",
+            AckMessage => "ack",
+            _ => "unknown"
+        };
+
+    private string GetLogPath(string ip, ShuttleMessageBase msg)
+    {
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "logs", ip);
+
+        var typeFolder = GetMessageFolder(msg);
+
+        var dir = Path.Combine(baseDir, typeFolder);
+
+        Directory.CreateDirectory(dir);
+
+        var fileName = $"{DateTime.Now:yyyy_MM_dd}.txt";
+
+        return Path.Combine(dir, fileName);
+    }
+
     private readonly SemaphoreSlim _logLock = new(1, 1);
 
     private void OnLogReceived(string ip, ShuttleMessageBase msg)
     {
         _ = ProcessLogAsync(ip, msg);
     }
+
     private async Task ProcessLogAsync(string ip, ShuttleMessageBase msg)
     {
         if (!IsEventForThisShuttle(ip)) return;
 
         var formattedString = msg.ToFormattedTerminalString();
 
+        var path = GetLogPath(ip, msg);
+
         await _logLock.WaitAsync();
         try
         {
             await File.AppendAllTextAsync(
-            pathLogShuttle,
-            $"[{DateTime.Now}] {formattedString}\n");
+                path,
+                $"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
         }
         finally
         {
@@ -732,7 +759,6 @@
 
         await InvokeAsync(() =>
         {
-            // Process types
             if (msg is TelemetryMessage tm) UpdateTelemetry(tm.Data);
             else if (msg is SensorMessage sm) UpdateSensors(sm.Data);
             else if (msg is StatsMessage stm) UpdateStats(stm.Data);
@@ -1101,10 +1127,21 @@
     private async Task OpenLogsShuttle()
     {
         if (isAndroid)
-        {
             return;
-        }
-        string way = Path.Combine(AppContext.BaseDirectory, "logs");
-        Process.Start("explorer.exe", way);
+
+        string path = Path.Combine(
+            AppContext.BaseDirectory,
+            "logs",
+            Shuttle.IPAddress!);
+
+        if (!Directory.Exists(path))
+            Directory.CreateDirectory(path);
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer",
+            Arguments = path,
+            UseShellExecute = true
+        });
     }
 }
