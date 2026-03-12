@@ -65,7 +65,7 @@
                 </div>
             </div>
 
-            @if (_connectedShuttles.Any())
+            @*  @if (_connectedShuttles.Any())
             {
                 <div class="card" style="margin-bottom: 15px;">
                     <div class="card-header">
@@ -86,14 +86,14 @@
                         </ul>
                     </div>
                 </div>
-            }
+            } *@
         </div>
 
         <div class="col-md-9">
             @if (_connectedShuttles.Any())
             {
 
-                @* <ul class="nav nav-tabs mb-3">
+                <ul class="nav nav-tabs mb-3">
                     @foreach (var (shuttle, index) in _connectedShuttles.Select((s, i) => (s, i)))
                     {
                         <li class="nav-item">
@@ -111,7 +111,7 @@
                             </a>
                         </li>
                     }
-                </ul> *@
+                </ul>
 
                 @if (ActiveTabIndex >= 0 && ActiveTabIndex < _connectedShuttles.Count)
                 {

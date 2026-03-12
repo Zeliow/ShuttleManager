@@ -8,10 +8,10 @@ namespace ShuttleManager.Shared.Models.Protocol
         public const byte PROTOCOL_SYNC_1_V2 = 0xBB;
         public const byte PROTOCOL_SYNC_2_V2 = 0xCC;
         public const byte PROTOCOL_VER = 2;
-        
+
         public const byte TARGET_ID_NONE = 0x00;
         public const byte TARGET_ID_BROADCAST = 0xFF;
-        
+
         public const byte MAX_LOG_STRING_LEN = 55;
         public const byte LOG_MAX_PRINTABLE_CHARS = MAX_LOG_STRING_LEN - 1;
     }
@@ -21,17 +21,19 @@ namespace ShuttleManager.Shared.Models.Protocol
     {
         // Routine Telemetry (Push/Pull)
         MSG_HEARTBEAT = 0x01,
+
         MSG_SENSORS = 0x02,
         MSG_STATS = 0x03,
         MSG_REQ_HEARTBEAT = 0x04,
         MSG_REQ_SENSORS = 0x05,
         MSG_REQ_STATS = 0x06,
-        
+
         // Asynchronous
         MSG_LOG = 0x10,
-        
+
         // Configuration
         MSG_CONFIG_SET = 0x20,
+
         MSG_CONFIG_GET = 0x21,
         MSG_CONFIG_REP = 0x22,
         MSG_CONFIG_SYNC_REQ = 0x23,
@@ -40,6 +42,7 @@ namespace ShuttleManager.Shared.Models.Protocol
 
         // Action Commands (Split for bandwidth efficiency)
         MSG_CMD_SIMPLE = 0x30,
+
         MSG_CMD_WITH_ARG = 0x31,
         MSG_SET_DATETIME = 0x32,
         MSG_ACK = 0x33
@@ -48,13 +51,32 @@ namespace ShuttleManager.Shared.Models.Protocol
     // --- Enums ---
     public enum LogLevel : byte
     {
-        LOG_INFO = 0, LOG_WARN = 1, LOG_ERROR = 2, LOG_DEBUG = 3
+        LOG_INFO = 0,
+        LOG_WARN = 1,
+        LOG_ERROR = 2,
+        LOG_DEBUG = 3
+    }
+
+    [Flags]
+    public enum ShuttleFault : ushort
+    {
+        FAULT_NONE = 0x0000,
+        FAULT_TOF_CH_F = 1 << 1,
+        FAULT_TOF_CH_R = 1 << 2,
+        FAULT_TOF_PAL_F = 1 << 3,
+        FAULT_TOF_PAL_R = 1 << 4,
+        FAULT_LIFTER_TIMEOUT = 1 << 9,
+        FAULT_MOTOR_STALL = 1 << 10,
+        FAULT_LOW_BATTERY = 1 << 11,
+        FAULT_CRASH_BUMPER = 1 << 12,
+        FAULT_MOVE_TIMEOUT = 1 << 13
     }
 
     public enum CmdType : byte
     {
         // -- 0x00 Block: Lifecycle & State --
         CMD_STOP = 0x00,
+
         CMD_STOP_MANUAL = 0x01,
         CMD_SYSTEM_RESET = 0x02,
         CMD_RESET_ERROR = 0x03,
@@ -65,6 +87,7 @@ namespace ShuttleManager.Shared.Models.Protocol
 
         // -- 0x10 Block: Core Movement --
         CMD_MOVE_RIGHT_MAN = 0x10,
+
         CMD_MOVE_LEFT_MAN = 0x11,
         CMD_MOVE_DIST_R = 0x12,
         CMD_MOVE_DIST_F = 0x13,
@@ -74,6 +97,7 @@ namespace ShuttleManager.Shared.Models.Protocol
 
         // -- 0x20 Block: Auto Operations --
         CMD_LOAD = 0x20,
+
         CMD_UNLOAD = 0x21,
         CMD_LONG_LOAD = 0x22,
         CMD_LONG_UNLOAD = 0x23,
@@ -85,6 +109,7 @@ namespace ShuttleManager.Shared.Models.Protocol
 
         // -- 0x30 Block: Configuration Updates --
         CMD_SAVE_EEPROM = 0x30,
+
         CMD_GET_CONFIG = 0x31,
         CMD_FIRMWARE_UPDATE = 0x32
     }

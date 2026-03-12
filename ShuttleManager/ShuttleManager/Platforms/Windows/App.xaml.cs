@@ -40,7 +40,7 @@ namespace ShuttleManager.WinUI
             var window = (Application.Windows.FirstOrDefault() as Microsoft.Maui.Controls.Window);
             if (window != null)
             {
-                window.Title = "[MICRON] Менеджер шаттлов S.V.3.2";
+                window.Title = "Менеджер шаттлов B.V.5.1";
 
                 var nativeWindow = window.Handler.PlatformView as Microsoft.UI.Xaml.Window;
                 if (nativeWindow != null)
@@ -51,9 +51,8 @@ namespace ShuttleManager.WinUI
 
                     if (appWindow != null)
                     {
-                        appWindow.Title = "[MICRON] Менеджер шаттлов S.V.3.2";
+                        appWindow.Title = "Менеджер шаттлов B.V.5.1";
 
-                        // Отключаем возможность изменения размера
                         var presenter = appWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
                         if (presenter != null)
                         {

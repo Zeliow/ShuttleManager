@@ -52,19 +52,23 @@
                             @BatteryData
                         </p>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label small text-muted">Статус:</label>
                         <p id="currentStatus_@ComponentId" style="margin-bottom: 0px;" class="fw-bold @GetStatusColorClass()">
                             @CurrentStatus
                         </p>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label small text-muted">Активность:</label>
                         <p class="small text-muted" style="margin-bottom: 0px;">@LastActivityTime</p>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label small text-muted">Время работы:</label>
                         <p class="small text-muted" style="margin-bottom: 0px;">@Uptime</p>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted">Ошибка:</label>
+                        <p class="small text-muted" style="margin-bottom: 0px;">@Shuttle.ErrorCode</p>
                     </div>
                 </div>
             </div>
@@ -462,7 +466,7 @@
     private bool IsFullErased = false;
 
     private string CurrentStatus => Shuttle.CurrentStatus;
-    private int ErrorCode => Shuttle.ErrorCode;
+    private ShuttleFault ErrorCode => (ShuttleFault)Shuttle.ErrorCode;
     private int WarningCode => Shuttle.WarningCode;
     private double Voltage => Shuttle.BatteryVoltage;
     private int BatteryPercentageValue => Shuttle.BatteryPercentage;
@@ -702,12 +706,29 @@
         });
     }
 
-    private async void OnLogReceived(string ip, ShuttleMessageBase msg)
+    private readonly SemaphoreSlim _logLock = new(1, 1);
+
+    private void OnLogReceived(string ip, ShuttleMessageBase msg)
+    {
+        _ = ProcessLogAsync(ip, msg);
+    }
+    private async Task ProcessLogAsync(string ip, ShuttleMessageBase msg)
     {
         if (!IsEventForThisShuttle(ip)) return;
 
         var formattedString = msg.ToFormattedTerminalString();
-        File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {formattedString}\n");
+
+        await _logLock.WaitAsync();
+        try
+        {
+            await File.AppendAllTextAsync(
+            pathLogShuttle,
+            $"[{DateTime.Now}] {formattedString}\n");
+        }
+        finally
+        {
+            _logLock.Release();
+        }
 
         await InvokeAsync(() =>
         {
@@ -728,18 +749,15 @@
     private void UpdateTelemetry(TelemetryPacket data)
     {
         Shuttle.LastActivity = DateTime.Now;
-        Shuttle.ErrorCode = data.ErrorCode;
+        Shuttle.ErrorCode = (ShuttleFault)data.ErrorCode;
         Shuttle.CurrentStatus = ((ShuttleState)data.ShuttleStatus).ToString();
         Shuttle.Position = data.CurrentPosition;
         Shuttle.CurrentSpeed = data.Speed;
         Shuttle.BatteryPercentage = data.BatteryCharge;
-        Shuttle.BatteryVoltage = data.BatteryVoltage_mV;
+        Shuttle.BatteryVoltage = data.BatteryVoltage_mV / 1000.0;
         Shuttle.StateFlags = data.StateFlags;
         Shuttle.ShuttleNumber = Convert.ToString(data.ShuttleNumber);
-
-        // Map State Flags
         Shuttle.IsLifterUp = (data.StateFlags & 1) != 0;
-        // Bit 1: motorStart, Bit 2: motorReverse, Bit 3: inverse, Bit 4: inChannel, Bit 5: fifoLifo
         Shuttle.IsInChannel = (data.StateFlags & 16) != 0;
         Shuttle.Inverse = (data.StateFlags & 8) != 0;
     }
@@ -752,7 +770,7 @@
         Shuttle.ForwardPalletDistance = data.DistancePltF;
         Shuttle.ReversePalletDistance = data.DistancePltR;
         Shuttle.Angle = data.Angle;
-        Shuttle.Temperature = data.Temperature_dC / 10;
+        Shuttle.Temperature = data.Temperature_dC / 10.0;
 
         // Map Hardware Flags
         // Bit 0: detectPalleteF1, Bit 1: F2, Bit 2: R1, Bit 3: R2
@@ -901,9 +919,37 @@
 
     private async Task SetTime()
     {
-        // Arg1 = Unix Timestamp
-        int timestamp = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        //await SendBinaryCmd(CmdType.CMD_SET_DATETIME, timestamp, 0, "Установка времени");
+        if (!Shuttle.IsConnected || Shuttle.IPAddress is null)
+        {
+            LogToTerminal("[ERROR] Нет подключения\n");
+            return;
+        }
+
+        _isCommandInProgress = true;
+
+        try
+        {
+            StateHasChanged();
+
+            LogToTerminal("[CMD] Установка времени\n");
+
+            var success = await HubClientService.SendDateTimeAsync(
+                Shuttle.IPAddress,
+                DateTime.UtcNow);
+
+            if (!success)
+                LogToTerminal("[WARNING] Установка времени не подтверждена\n");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка установки времени");
+            LogToTerminal($"[ERROR] {ex.Message}\n");
+        }
+        finally
+        {
+            _isCommandInProgress = false;
+            StateHasChanged();
+        }
     }
 
     private bool isReversed = false;

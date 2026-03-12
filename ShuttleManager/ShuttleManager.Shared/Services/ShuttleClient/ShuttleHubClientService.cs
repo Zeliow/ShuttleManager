@@ -149,6 +149,89 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
         }
 
+        public Task<bool> SendDateTimeAsync(
+            string ipAddress,
+            DateTime utcTime,
+            int timeoutMs = 1000)
+        {
+            var packet = new DateTimePacket
+            {
+                Year = (byte)(utcTime.Year - 2000),
+                Month = (byte)utcTime.Month,
+                Day = (byte)utcTime.Day,
+                Hour = (byte)utcTime.Hour,
+                Minute = (byte)utcTime.Minute,
+                Second = (byte)utcTime.Second
+            };
+
+            return SendPacketAsync(ipAddress, MsgID.MSG_SET_DATETIME, packet, timeoutMs);
+        }
+
+        public Task<bool> SendBinaryCommandAsync(
+            string ipAddress,
+            CmdType cmd,
+            int arg1 = 0,
+            int arg2 = 0,
+            int timeoutMs = 1000)
+        {
+            if (arg1 == 0 && arg2 == 0)
+            {
+                var packet = new SimpleCmdPacket
+                {
+                    CmdType = (byte)cmd
+                };
+
+                return SendPacketAsync(ipAddress, MsgID.MSG_CMD_SIMPLE, packet, timeoutMs);
+            }
+            else
+            {
+                var packet = new ParamCmdPacket
+                {
+                    CmdType = (byte)cmd,
+                    Arg = arg1
+                };
+
+                return SendPacketAsync(ipAddress, MsgID.MSG_CMD_WITH_ARG, packet, timeoutMs);
+            }
+        }
+
+        public Task<bool> SendConfigSetAsync(
+            string ipAddress,
+            ConfigParamID param,
+            int value,
+            int timeoutMs = 1000)
+        {
+            var packet = new ConfigPacket
+            {
+                ParamID = (byte)param,
+                Value = value
+            };
+
+            return SendPacketAsync(ipAddress, MsgID.MSG_CONFIG_SET, packet, timeoutMs);
+        }
+
+        public async Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs = 1000)
+        {
+            // Legacy method wrapper - assumes command string maps to something,
+            // but since we moved to binary, we should ideally use SendBinaryCommandAsync.
+            // For now, let's just log or ignore if we can't map it.
+            // OR: We can send it as a raw text line if the device supports it?
+            // The protocol definition implies ONLY binary frames.
+            // So we must map string to CmdType if possible.
+            // But this method signature is fixed by Interface (which we will update).
+            // I'll leave it as a placeholder that fails or tries to map basic commands.
+
+            // NOTE: The UI calls this with "dStop_", etc.
+            // I will implement a basic mapping in UI component, but here let's just return false
+            // or try to send binary if we can guess.
+            // Actually, I should update the Interface to remove this or change it.
+            // For now, I'll keep it for compilation compatibility but it won't work with binary protocol.
+            Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync(string) is deprecated. Use SendBinaryCommandAsync.");
+            return false;
+        }
+
+        public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
+
         private async Task ReceiveLoopAsync(ShuttleConnection connection, CancellationToken cancellationToken)
         {
             byte[] buffer = new byte[1024];
@@ -278,190 +361,65 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
         }
 
-        private void HandleBinaryMessage(ShuttleConnection connection, MsgID msgId, ReadOnlySpan<byte> payload, byte seq)
-        {
-            ShuttleMessageBase? message = null;
-
-            switch (msgId)
-            {
-                case MsgID.MSG_HEARTBEAT:
-                    if (payload.Length >= Marshal.SizeOf<TelemetryPacket>())
-                    {
-                        var packet = MemoryMarshal.Read<TelemetryPacket>(payload);
-                        message = new TelemetryMessage { Data = packet };
-
-                        // Update shuttle ID from heartbeat if not already set
-                        if (connection.ShuttleId == -1)
-                        {
-                            connection.ShuttleId = (int)packet.ShuttleNumber;
-                        }
-                    }
-                    break;
-
-                case MsgID.MSG_SENSORS:
-                    if (payload.Length >= Marshal.SizeOf<SensorPacket>())
-                        message = new SensorMessage { Data = MemoryMarshal.Read<SensorPacket>(payload) };
-                    break;
-
-                case MsgID.MSG_STATS:
-                    if (payload.Length >= Marshal.SizeOf<StatsPacket>())
-                        message = new StatsMessage { Data = MemoryMarshal.Read<StatsPacket>(payload) };
-                    break;
-
-                case MsgID.MSG_LOG:
-                    if (payload.Length >= 1)
-                    {
-                        var level = (LogLevel)payload[0];
-                        var text = Encoding.UTF8.GetString(payload.Slice(1));
-                        message = new RawLogMessage { Level = level, Text = text };
-                    }
-                    break;
-
-                case MsgID.MSG_CONFIG_SET:
-                case MsgID.MSG_CONFIG_GET:
-                case MsgID.MSG_CONFIG_REP:
-                    if (payload.Length >= Marshal.SizeOf<ConfigPacket>())
-                        message = new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) };
-                    break;
-
-                case MsgID.MSG_ACK:
-                    if (payload.Length >= Marshal.SizeOf<AckPacket>())
-                    {
-                        var ackData = MemoryMarshal.Read<AckPacket>(payload);
-                        message = new AckMessage { Data = ackData };
-                        HandleAck(ackData);
-                    }
-                    break;
-            }
-
-            if (message != null)
-            {
-                OnLogReceived(connection.IpAddress, message);
-            }
-        }
-
-        private void HandleAck(AckPacket ack)
-        {
-            if (_ackWaiters.TryRemove(ack.RefSeq, out var tcs))
-            {
-                if (ack.Result == 0) tcs.TrySetResult(true);
-                else tcs.TrySetResult(false);
-            }
-        }
-
-        private static ushort Crc16Ccitt(ReadOnlySpan<byte> data)
-        {
-            ushort crc = 0xFFFF;
-            foreach (byte b in data)
-            {
-                crc ^= (ushort)(b << 8);
-                for (int i = 0; i < 8; i++)
-                {
-                    if ((crc & 0x8000) != 0)
-                        crc = (ushort)((crc << 1) ^ 0x1021);
-                    else
-                        crc <<= 1;
-                }
-            }
-            return crc;
-        }
-
-        public async Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs = 1000)
-        {
-            // Legacy method wrapper - assumes command string maps to something,
-            // but since we moved to binary, we should ideally use SendBinaryCommandAsync.
-            // For now, let's just log or ignore if we can't map it.
-            // OR: We can send it as a raw text line if the device supports it?
-            // The protocol definition implies ONLY binary frames.
-            // So we must map string to CmdType if possible.
-            // But this method signature is fixed by Interface (which we will update).
-            // I'll leave it as a placeholder that fails or tries to map basic commands.
-
-            // NOTE: The UI calls this with "dStop_", etc.
-            // I will implement a basic mapping in UI component, but here let's just return false
-            // or try to send binary if we can guess.
-            // Actually, I should update the Interface to remove this or change it.
-            // For now, I'll keep it for compilation compatibility but it won't work with binary protocol.
-            Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync(string) is deprecated. Use SendBinaryCommandAsync.");
-            return false;
-        }
-
-        public async Task<bool> SendBinaryCommandAsync(string ipAddress, CmdType cmd, int arg1 = 0, int arg2 = 0, int timeoutMs = 1000)
+        private async Task<bool> SendPacketAsync<TPayload>(
+            string ipAddress,
+            MsgID msgId,
+            TPayload payload,
+            int timeoutMs = 1000)
+            where TPayload : struct
         {
             ShuttleConnection? connection;
+
             lock (_lock)
             {
-                if (!_connections.TryGetValue(ipAddress, out var conn)) return false;
+                if (!_connections.TryGetValue(ipAddress, out var conn))
+                    return false;
+
                 connection = conn;
             }
 
-            if (connection.NetworkStream == null) return false;
+            if (connection.NetworkStream == null)
+                return false;
 
             byte seq = connection.NextSeq++;
 
-            // Определяем тип сообщения и формируем пакет в зависимости от наличия аргумента
-            byte msgId;
-            byte[] payload;
+            int payloadSize = Marshal.SizeOf<TPayload>();
 
-            if (arg1 == 0 && arg2 == 0)
-            {
-                // Команда без аргумента - используем MSG_CMD_SIMPLE (1 байт)
-                msgId = (byte)MsgID.MSG_CMD_SIMPLE;
-                var cmdPacket = new SimpleCmdPacket
-                {
-                    CmdType = (byte)cmd
-                };
-                payload = new byte[1];
-                MemoryMarshal.Write(payload, ref cmdPacket);
-            }
-            else
-            {
-                // Команда с аргументом - используем MSG_CMD_WITH_ARG (5 байт)
-                msgId = (byte)MsgID.MSG_CMD_WITH_ARG;
-                var cmdPacket = new ParamCmdPacket
-                {
-                    CmdType = (byte)cmd,
-                    Arg = arg1
-                };
-                payload = new byte[5];
-                MemoryMarshal.Write(payload, ref cmdPacket);
-            }
+            const int headerSize = 6;
+            const int crcSize = 2;
 
-            // Формируем фрейм по протоколу V2
-            // Header: Sync1(1) + Sync2(1) + MsgID(1) + TargetID(1) + Seq(1) + Length(1) = 6 байт
-            int headerSize = 6;
-            int crcSize = 2;
-            int frameSize = headerSize + payload.Length + crcSize;
+            int frameSize = headerSize + payloadSize + crcSize;
+
             byte[] frame = new byte[frameSize];
 
             // Header
-            frame[0] = ProtocolConstants.PROTOCOL_SYNC_1_V2; // 0xBB
-            frame[1] = ProtocolConstants.PROTOCOL_SYNC_2_V2; // 0xCC
-            frame[2] = msgId;
-            frame[3] = ProtocolConstants.TARGET_ID_NONE; // Прямое соединение
+            frame[0] = PROTOCOL_SYNC_1_V2;
+            frame[1] = PROTOCOL_SYNC_2_V2;
+            frame[2] = (byte)msgId;
+            frame[3] = ProtocolConstants.TARGET_ID_NONE;
             frame[4] = seq;
-            frame[5] = (byte)payload.Length;
+            frame[5] = (byte)payloadSize;
 
             // Payload
-            payload.CopyTo(frame, headerSize);
+            MemoryMarshal.Write(frame.AsSpan(headerSize, payloadSize), in payload);
 
-            // CRC16-CCITT
-            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, headerSize + payload.Length));
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(headerSize + payload.Length, 2), crc);
+            // CRC
+            ushort crc = Crc16Ccitt(frame.AsSpan(0, headerSize + payloadSize));
+            BinaryPrimitives.WriteUInt16LittleEndian(
+                frame.AsSpan(headerSize + payloadSize, 2),
+                crc);
 
             try
             {
                 var tcs = new TaskCompletionSource<bool>();
                 _ackWaiters[seq] = tcs;
 
-                // Cancel waiter after timeout
                 var cts = new CancellationTokenSource(timeoutMs);
+
                 cts.Token.Register(() =>
                 {
-                    if (_ackWaiters.TryRemove(seq, out var pendingTcs))
-                    {
-                        pendingTcs.TrySetResult(false); // Timeout
-                    }
+                    if (_ackWaiters.TryRemove(seq, out var pending))
+                        pending.TrySetResult(false);
                 });
 
                 await connection.NetworkStream.WriteAsync(frame);
@@ -469,85 +427,12 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
                 return await tcs.Task;
             }
-            catch (Exception ex)
+            catch
             {
-                Debug.WriteLine($"[ShuttleHubClientService] SendBinaryCommandAsync Error: {ex.Message}");
                 _ackWaiters.TryRemove(seq, out _);
                 return false;
             }
         }
-
-        public async Task<bool> SendConfigSetAsync(string ipAddress, ConfigParamID param, int value, int timeoutMs = 1000)
-        {
-            ShuttleConnection? connection;
-            lock (_lock)
-            {
-                if (!_connections.TryGetValue(ipAddress, out var conn)) return false;
-                connection = conn;
-            }
-
-            if (connection.NetworkStream == null) return false;
-
-            byte seq = connection.NextSeq++;
-
-            var cfgPacket = new ConfigPacket
-            {
-                ParamID = (byte)param,
-                Value = value
-            };
-
-            int payloadSize = Marshal.SizeOf(cfgPacket);
-
-            // Формируем фрейм по протоколу V2
-            // Header: Sync1(1) + Sync2(1) + MsgID(1) + TargetID(1) + Seq(1) + Length(1) = 6 байт
-            int headerSize = 6;
-            int crcSize = 2;
-            int frameSize = headerSize + payloadSize + crcSize;
-            byte[] frame = new byte[frameSize];
-
-            // Header - Protocol V2 format
-            frame[0] = ProtocolConstants.PROTOCOL_SYNC_1_V2; // 0xBB
-            frame[1] = ProtocolConstants.PROTOCOL_SYNC_2_V2; // 0xCC
-            frame[2] = (byte)MsgID.MSG_CONFIG_SET;
-            frame[3] = ProtocolConstants.TARGET_ID_NONE; // Прямое соединение
-            frame[4] = seq;
-            frame[5] = (byte)payloadSize; // Length - 1 byte in V2
-
-            // Payload
-            MemoryMarshal.Write(frame.AsSpan(headerSize, payloadSize), ref cfgPacket);
-
-            // CRC16-CCITT
-            ushort crc = Crc16Ccitt(new ReadOnlySpan<byte>(frame, 0, headerSize + payloadSize));
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(headerSize + payloadSize, 2), crc);
-
-            try
-            {
-                var tcs = new TaskCompletionSource<bool>();
-                _ackWaiters[seq] = tcs;
-
-                var cts = new CancellationTokenSource(timeoutMs);
-                cts.Token.Register(() =>
-                {
-                    if (_ackWaiters.TryRemove(seq, out var pendingTcs))
-                    {
-                        pendingTcs.TrySetResult(false);
-                    }
-                });
-
-                await connection.NetworkStream.WriteAsync(frame, 0, frame.Length);
-                await connection.NetworkStream.FlushAsync();
-
-                return await tcs.Task;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ShuttleHubClientService] SendConfigSetAsync Error: {ex.Message}");
-                _ackWaiters.TryRemove(seq, out _);
-                return false;
-            }
-        }
-
-        public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
 
         private async Task InternalDisconnectAsync(string ipAddress)
         {
@@ -603,6 +488,99 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 }
                 _connections.Clear();
             }
+        }
+
+        private void HandleBinaryMessage(
+            ShuttleConnection connection,
+            MsgID msgId,
+            ReadOnlySpan<byte> payload, byte seq)
+        {
+            ShuttleMessageBase? message = null;
+
+            switch (msgId)
+            {
+                case MsgID.MSG_HEARTBEAT:
+                    if (payload.Length >= Marshal.SizeOf<TelemetryPacket>())
+                    {
+                        var packet = MemoryMarshal.Read<TelemetryPacket>(payload);
+                        message = new TelemetryMessage { Data = packet };
+
+                        // Update shuttle ID from heartbeat if not already set
+                        if (connection.ShuttleId == -1)
+                        {
+                            connection.ShuttleId = (int)packet.ShuttleNumber;
+                        }
+                    }
+                    break;
+
+                case MsgID.MSG_SENSORS:
+                    if (payload.Length >= Marshal.SizeOf<SensorPacket>())
+                        message = new SensorMessage { Data = MemoryMarshal.Read<SensorPacket>(payload) };
+                    break;
+
+                case MsgID.MSG_STATS:
+                    if (payload.Length >= Marshal.SizeOf<StatsPacket>())
+                        message = new StatsMessage { Data = MemoryMarshal.Read<StatsPacket>(payload) };
+                    break;
+
+                case MsgID.MSG_LOG:
+                    if (payload.Length >= 1)
+                    {
+                        var level = (LogLevel)payload[0];
+                        var text = Encoding.UTF8.GetString(payload.Slice(1));
+                        message = new RawLogMessage { Level = level, Text = text };
+                    }
+                    break;
+
+                case MsgID.MSG_CONFIG_SET:
+
+                case MsgID.MSG_CONFIG_GET:
+
+                case MsgID.MSG_CONFIG_REP:
+                    if (payload.Length >= Marshal.SizeOf<ConfigPacket>())
+                        message = new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) };
+                    break;
+
+                case MsgID.MSG_ACK:
+                    if (payload.Length >= Marshal.SizeOf<AckPacket>())
+                    {
+                        var ackData = MemoryMarshal.Read<AckPacket>(payload);
+                        message = new AckMessage { Data = ackData };
+                        HandleAck(ackData);
+                    }
+                    break;
+            }
+
+            if (message != null)
+            {
+                OnLogReceived(connection.IpAddress, message);
+            }
+        }
+
+        private void HandleAck(AckPacket ack)
+        {
+            if (_ackWaiters.TryRemove(ack.RefSeq, out var tcs))
+            {
+                if (ack.Result == 0) tcs.TrySetResult(true);
+                else tcs.TrySetResult(false);
+            }
+        }
+
+        private static ushort Crc16Ccitt(ReadOnlySpan<byte> data)
+        {
+            ushort crc = 0xFFFF;
+            foreach (byte b in data)
+            {
+                crc ^= (ushort)(b << 8);
+                for (int i = 0; i < 8; i++)
+                {
+                    if ((crc & 0x8000) != 0)
+                        crc = (ushort)((crc << 1) ^ 0x1021);
+                    else
+                        crc <<= 1;
+                }
+            }
+            return crc;
         }
 
         private void OnConnected(string ip, int id) => Connected?.Invoke(ip, id);

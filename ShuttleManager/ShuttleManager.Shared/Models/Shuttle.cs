@@ -1,3 +1,4 @@
+using ShuttleManager.Shared.Models.Protocol;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -26,7 +27,7 @@ public class Shuttle
     public bool IsConnected { get; set; } = false;
     public string? LastReceivedData { get; set; }
     public string CurrentStatus { get; set; } = "Неизвестно";
-    public int ErrorCode { get; set; } = 0;
+    public ShuttleFault ErrorCode { get; set; }
     public int WarningCode { get; set; } = 0;
     public DateTime ConnectionTime { get; set; } = DateTime.Now;
     public DateTime LastActivity { get; set; } = DateTime.Now;
