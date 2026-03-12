@@ -11,12 +11,12 @@
       "RelativeMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|solutionrelative:shuttlemanager\\shuttlemanager.shared\\models\\shuttlemessages.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|c:\\users\\k.nikolaev\\source\\repos\\shuttlemanager\\shuttlemanager\\shuttlemanager.shared\\models\\protocol\\protocol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|solutionrelative:shuttlemanager\\shuttlemanager.shared\\models\\protocol\\protocol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|c:\\users\\k.nikolaev\\source\\repos\\shuttlemanager\\shuttlemanager\\shuttlemanager.shared\\pages\\shuttle\\shuttlestatscomponent.razor||{40D31677-CBC0-4297-A9EF-89D907823A98}",
       "RelativeMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|solutionrelative:shuttlemanager\\shuttlemanager.shared\\pages\\shuttle\\shuttlestatscomponent.razor||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|c:\\users\\k.nikolaev\\source\\repos\\shuttlemanager\\shuttlemanager\\shuttlemanager.shared\\models\\protocol\\protocol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|solutionrelative:shuttlemanager\\shuttlemanager.shared\\models\\protocol\\protocol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{0F426896-FB3C-1F86-3B55-478746B2CFC9}|ShuttleManager\\ShuttleManager.Shared\\ShuttleManager.Shared.csproj|c:\\users\\k.nikolaev\\source\\repos\\shuttlemanager\\shuttlemanager\\shuttlemanager.shared\\pages\\shuttle\\shuttledatasensorcomponent.razor||{40D31677-CBC0-4297-A9EF-89D907823A98}",
@@ -244,7 +244,7 @@
               "RelativeDocumentMoniker": "ShuttleManager\\ShuttleManager.Shared\\Models\\ShuttleMessages.cs",
               "ToolTip": "C:\\Users\\k.nikolaev\\source\\repos\\ShuttleManager\\ShuttleManager\\ShuttleManager.Shared\\Models\\ShuttleMessages.cs",
               "RelativeToolTip": "ShuttleManager\\ShuttleManager.Shared\\Models\\ShuttleMessages.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAADAAAAAAAAAA==",
+              "ViewState": "AgIAAAgAAAAAAAAAAAA2wBwAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-03-12T11:48:03.48Z",
               "EditorCaption": ""
@@ -283,14 +283,14 @@
               "RelativeDocumentMoniker": "ShuttleManager\\ShuttleManager.Shared\\Pages\\Shuttle\\ShuttleHubControlComponent.razor",
               "ToolTip": "C:\\Users\\k.nikolaev\\source\\repos\\ShuttleManager\\ShuttleManager\\ShuttleManager.Shared\\Pages\\Shuttle\\ShuttleHubControlComponent.razor",
               "RelativeToolTip": "ShuttleManager\\ShuttleManager.Shared\\Pages\\Shuttle\\ShuttleHubControlComponent.razor",
-              "ViewState": "AgIAADICAAAAAAAAAAAAAO4CAAAcAAAAAAAAAA==",
+              "ViewState": "AgIAAN0CAAAAAAAAAAAAADEDAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
               "WhenOpened": "2026-03-12T11:35:01.119Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 3,
               "Title": "Protocol.cs",
               "DocumentMoniker": "C:\\Users\\k.nikolaev\\source\\repos\\ShuttleManager\\ShuttleManager\\ShuttleManager.Shared\\Models\\Protocol\\Protocol.cs",
               "RelativeDocumentMoniker": "ShuttleManager\\ShuttleManager.Shared\\Models\\Protocol\\Protocol.cs",
@@ -303,13 +303,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 2,
               "Title": "ShuttleStatsComponent.razor",
               "DocumentMoniker": "C:\\Users\\k.nikolaev\\source\\repos\\ShuttleManager\\ShuttleManager\\ShuttleManager.Shared\\Pages\\Shuttle\\ShuttleStatsComponent.razor",
               "RelativeDocumentMoniker": "ShuttleManager\\ShuttleManager.Shared\\Pages\\Shuttle\\ShuttleStatsComponent.razor",
               "ToolTip": "C:\\Users\\k.nikolaev\\source\\repos\\ShuttleManager\\ShuttleManager\\ShuttleManager.Shared\\Pages\\Shuttle\\ShuttleStatsComponent.razor",
               "RelativeToolTip": "ShuttleManager\\ShuttleManager.Shared\\Pages\\Shuttle\\ShuttleStatsComponent.razor",
-              "ViewState": "AgIAABgAAAAAAAAAAAAAADQAAABCAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAfAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
               "WhenOpened": "2026-03-12T11:33:33.488Z",
               "EditorCaption": ""

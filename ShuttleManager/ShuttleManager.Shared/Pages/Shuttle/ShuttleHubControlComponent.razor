@@ -817,14 +817,14 @@
     private void UpdateStats(StatsPacket data)
     {
         Shuttle.LastActivity = DateTime.Now;
-        Shuttle.TotalDist = data.TotalDist;
+        Shuttle.TotalDist = data.TotalDist / 1000;
         Shuttle.LoadCounter = data.LoadCounter;
         Shuttle.UnloadCounter = data.UnloadCounter;
         Shuttle.CompactCounter = data.CompactCounter;
         Shuttle.LiftUpCounter = data.LiftUpCounter;
         Shuttle.LiftDownCounter = data.LiftDownCounter;
         Shuttle.LifetimePalletsDetected = data.LifetimePalletsDetected;
-        Shuttle.TotalUptimeMinutes = data.TotalUptimeMinutes;
+        Shuttle.TotalUptimeMinutes = data.TotalUptimeMinutes / 60;
         Shuttle.MotorStallCount = data.MotorStallCount;
         Shuttle.LifterOverloadCount = data.LifterOverloadCount;
         Shuttle.CrashCount = data.CrashCount;
