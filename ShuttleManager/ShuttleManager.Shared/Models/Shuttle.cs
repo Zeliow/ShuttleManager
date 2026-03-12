@@ -53,6 +53,16 @@ public class Shuttle
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            PruneTerminalMessagesInternal();
         }
     }
 
@@ -64,9 +74,9 @@ public class Shuttle
         }
     }
 
-    public void RemoveTerminalMessage()
+    private void PruneTerminalMessagesInternal()
     {
-        lock (_lock)
+        if (_terminalMessages.Count > 900)
         {
             _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
         }
