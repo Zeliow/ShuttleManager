@@ -45,17 +45,17 @@ public static class BinaryCommandMapper
 
 public static class LegacyConfigMapper
 {
-    public static string Map(int shuttleId, ShuttleConfigCommand cmd)
+    public static string Map(int shuttleId, ShuttleConfigCommand cmd, int value)
     {
         return cmd switch
         {
             ShuttleConfigCommand.ReverseMode => $"{shuttleId}dRevMo",
-            ShuttleConfigCommand.MaxSpeed => $"{shuttleId}dMxSpd",
-            ShuttleConfigCommand.MinBattery => $"{shuttleId}dMnBat",
-            ShuttleConfigCommand.InterPalletDistance => $"{shuttleId}dPalDt",
+            ShuttleConfigCommand.MaxSpeed => $"{shuttleId}dSp{value}", // ok!
+            ShuttleConfigCommand.MinBattery => $"{shuttleId}dBc{value}", // ok!
+            ShuttleConfigCommand.InterPalletDistance => $"{shuttleId}dDm{value}", //ok!
             ShuttleConfigCommand.ChannelOffset => $"{shuttleId}dChOfs",
-            ShuttleConfigCommand.ShuttleLength => $"{shuttleId}dShLen",
-            ShuttleConfigCommand.ShuttleNumber => $"{shuttleId}dShNum",
+            ShuttleConfigCommand.ShuttleLength => $"{shuttleId}dSl{value}", //not ok. TODO: add zero before value for 800 lenght.
+            ShuttleConfigCommand.ShuttleNumber => $"{shuttleId}dNN{value}", //ok!
             _ => throw new NotSupportedException(
                 $"Конфигурационная команда '{cmd}' не поддерживается в легаси-протоколе")
         };

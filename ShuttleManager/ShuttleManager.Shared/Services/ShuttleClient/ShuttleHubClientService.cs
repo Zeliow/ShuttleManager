@@ -298,8 +298,14 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             return true;
         }
 
-        private async Task<bool> SendLegacyConfig(ShuttleConnection connection, string command, int value)
+        private async Task<bool> SendLegacyConfig(ShuttleConnection connection, string command)
         {
+            var data = Encoding.UTF8.GetBytes(command + "\n");
+
+            await connection.NetworkStream!.WriteAsync(data);
+            await connection.NetworkStream.FlushAsync();
+
+            return true;
         }
 
         public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
@@ -774,35 +780,21 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             {
                 case ShuttleProtocolType.Binary:
 
-                    var cmd = BinaryCommandMapper.Map(param);
+                    var cmd = BinaryConfigMapper.Map(param);
 
-                    return await SendConfigSetAsync(ip, param, value);
+                    return await SendConfigSetAsync(ip, cmd, value);
 
                 case ShuttleProtocolType.Legacy:
 
-                    var text = LegacyCommandMapper.Map(
+                    var text = LegacyConfigMapper.Map(
                         conn.ShuttleId,
-                        command);
+                        param, value);
 
                     return await SendLegacyConfig(conn, text);
 
                 default:
                     return false;
             }
-
-            var configParamId = param switch
-            {
-                ShuttleConfigCommand.ReverseMode => ConfigParamID.CFG_REVERSE_MODE,
-                ShuttleConfigCommand.MaxSpeed => ConfigParamID.CFG_MAX_SPEED,
-                ShuttleConfigCommand.MinBattery => ConfigParamID.CFG_MIN_BATT,
-                ShuttleConfigCommand.InterPalletDistance => ConfigParamID.CFG_INTER_PALLET,
-                ShuttleConfigCommand.ChannelOffset => ConfigParamID.CFG_CHNL_OFFSET,
-                ShuttleConfigCommand.ShuttleLength => ConfigParamID.CFG_SHUTTLE_LEN,
-                ShuttleConfigCommand.ShuttleNumber => ConfigParamID.CFG_SHUTTLE_NUM,
-                _ => throw new ArgumentOutOfRangeException(nameof(param), param, "Неизвестный параметр конфигурации")
-            };
-
-            return await SendConfigSetAsync(ip, configParamId, value);
         }
     }
 }
