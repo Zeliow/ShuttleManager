@@ -68,43 +68,46 @@
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small text-muted">Ошибка:</label>
-                        <p class="small text-muted" style="margin-bottom: 0px;">@Shuttle.ErrorCode</p>
+                        <p class="small text-muted" style="margin-bottom: 0px;">
+                            @if (Shuttle.ErrorCode != ShuttleFault.FAULT_NONE)
+                                @Shuttle.ErrorCode
+                            </p>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="container-fluid" style="padding: 0px;">
-                <div class="row">
-                    <div class="col-md-8 ">
-                        <div class="card mb-2">
-                            <div class="card-body p-2">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label>
-                                        @SwitchLabelView()
-                                    </label>
-                                    <div>
-                                        <button class="btn btn-sm btn-outline-info me-1"
-                                                @onclick="SensorView"
-                                                title="Переключить отображение">
-                                            <b class="bi bi-speedometer2">👁</b>
-                                        </button>
+                <div class="container-fluid" style="padding: 0px;">
+                    <div class="row">
+                        <div class="col-md-8 ">
+                            <div class="card mb-2">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label>
+                                            @SwitchLabelView()
+                                        </label>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-info me-1"
+                                                    @onclick="SensorView"
+                                                    title="Переключить отображение">
+                                                <b class="bi bi-speedometer2">👁</b>
+                                            </button>
 
-                                        @* <button class="btn btn-sm btn-outline-warning me-1"
+                                            @* <button class="btn btn-sm btn-outline-warning me-1"
                                                 @onclick="TopScadaView">
                                             <b class="bi bi-speedometer2">?</b>
                                         </button> *@
 
-                                        <button class="btn btn-sm btn-outline-info me-1"
-                                                @onclick="StatsView">
-                                            <b class="bi bi-graph-up">📊</b>
-                                        </button>
-
-                                        @if (!_showSensorsView && !_statsView)
-                                        {
-                                            <button class="btn btn-sm btn-outline-danger me-1"
-                                                    @onclick="ClearTerminal">
-                                                ❌
+                                            <button class="btn btn-sm btn-outline-info me-1"
+                                                    @onclick="StatsView">
+                                                <b class="bi bi-graph-up">📊</b>
                                             </button>
-                                        }
+
+                                            @if (!_showSensorsView && !_statsView)
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger me-1"
+                                                        @onclick="ClearTerminal">
+                                                    ❌
+                                                </button>
+                                            }
                                     </div>
                                 </div>
                                 @if (_showSensorsView)
@@ -572,14 +575,11 @@
     {
         try
         {
-            if (!Directory.Exists($"{AppContext.BaseDirectory}/logs"))
-            {
-                Directory.CreateDirectory($"{AppContext.BaseDirectory}/logs");
-            }
+            Directory.CreateDirectory(
+            Path.Combine(AppContext.BaseDirectory, "logs"));
             HubClientService.Connected += OnHubConnected;
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.LogReceived += OnLogReceived;
-            pathLogShuttle = Path.Combine($"{AppContext.BaseDirectory}/logs", $"Shuttle_Log_Number_{DateTime.Now.Day}_{DateTime.Now.Month}_{DateTime.Now.Year}_{Shuttle.IPAddress}.txt");
             Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
             StateHasChanged();
         }
@@ -706,24 +706,67 @@
         });
     }
 
+    private static string GetMessageFolder(ShuttleMessageBase msg) =>
+        msg switch
+        {
+            TelemetryMessage => "telemetry",
+            SensorMessage => "sensors",
+            StatsMessage => "stats",
+            RawLogMessage => "raw",
+            ConfigMessage => "config",
+            AckMessage => "ack",
+            _ => "unknown"
+        };
+
+    private string GetLogPath(string ip, ShuttleMessageBase msg)
+    {
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "logs", ip);
+
+        var typeFolder = GetMessageFolder(msg);
+
+        var dir = Path.Combine(baseDir, typeFolder);
+
+        Directory.CreateDirectory(dir);
+
+        var fileName = $"{DateTime.Now:yyyy_MM_dd}.txt";
+
+        return Path.Combine(dir, fileName);
+    }
+
+    private string GetAllLogPath(string ip)
+    {
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "logs", ip, "all");
+
+        Directory.CreateDirectory(baseDir);
+
+        var fileName = $"{DateTime.Now:yyyy_MM_dd}.txt";
+
+        return Path.Combine(baseDir, fileName);
+    }
+
     private readonly SemaphoreSlim _logLock = new(1, 1);
 
     private void OnLogReceived(string ip, ShuttleMessageBase msg)
     {
         _ = ProcessLogAsync(ip, msg);
     }
+
     private async Task ProcessLogAsync(string ip, ShuttleMessageBase msg)
     {
         if (!IsEventForThisShuttle(ip)) return;
 
         var formattedString = msg.ToFormattedTerminalString();
+        var timestamp = $"[{DateTime.Now:HH:mm:ss}] ";
+
+        var typePath = GetLogPath(ip, msg);
+        var allPath = GetAllLogPath(ip);
 
         await _logLock.WaitAsync();
         try
         {
-            await File.AppendAllTextAsync(
-            pathLogShuttle,
-            $"[{DateTime.Now}] {formattedString}\n");
+            var line = $"{timestamp}{formattedString}\n";
+            await File.AppendAllTextAsync(typePath, line);
+            await File.AppendAllTextAsync(allPath, line);
         }
         finally
         {
@@ -732,7 +775,6 @@
 
         await InvokeAsync(() =>
         {
-            // Process types
             if (msg is TelemetryMessage tm) UpdateTelemetry(tm.Data);
             else if (msg is SensorMessage sm) UpdateSensors(sm.Data);
             else if (msg is StatsMessage stm) UpdateStats(stm.Data);
@@ -740,7 +782,7 @@
 
             if (msg is RawLogMessage or AckMessage or ConfigMessage)
             {
-                LogToTerminal($"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
+                LogToTerminal($"{timestamp}{formattedString}\n");
             }
             StateHasChanged();
         });
@@ -791,14 +833,14 @@
     private void UpdateStats(StatsPacket data)
     {
         Shuttle.LastActivity = DateTime.Now;
-        Shuttle.TotalDist = data.TotalDist;
+        Shuttle.TotalDist = data.TotalDist / 1000;
         Shuttle.LoadCounter = data.LoadCounter;
         Shuttle.UnloadCounter = data.UnloadCounter;
         Shuttle.CompactCounter = data.CompactCounter;
         Shuttle.LiftUpCounter = data.LiftUpCounter;
         Shuttle.LiftDownCounter = data.LiftDownCounter;
         Shuttle.LifetimePalletsDetected = data.LifetimePalletsDetected;
-        Shuttle.TotalUptimeMinutes = data.TotalUptimeMinutes;
+        Shuttle.TotalUptimeMinutes = data.TotalUptimeMinutes / 60;
         Shuttle.MotorStallCount = data.MotorStallCount;
         Shuttle.LifterOverloadCount = data.LifterOverloadCount;
         Shuttle.CrashCount = data.CrashCount;
@@ -1101,10 +1143,21 @@
     private async Task OpenLogsShuttle()
     {
         if (isAndroid)
-        {
             return;
-        }
-        string way = Path.Combine(AppContext.BaseDirectory, "logs");
-        Process.Start("explorer.exe", way);
+
+        string path = Path.Combine(
+            AppContext.BaseDirectory,
+            "logs",
+            Shuttle.IPAddress!);
+
+        if (!Directory.Exists(path))
+            Directory.CreateDirectory(path);
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer",
+            Arguments = path,
+            UseShellExecute = true
+        });
     }
 }
