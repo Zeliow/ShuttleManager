@@ -54,9 +54,11 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         Home,                 // CMD_HOME
         SealForward,          // CMD_COMPACT_F
         SealBackward,         // CMD_COMPACT_R
-        LiftUp,               // CMD_LIFT_UP
-        LiftDown,             // CMD_LIFT_DOWN
-        SystemReset,          // CMD_SYSTEM_RESET
+        LiftUp,               // CMD_LIFT_UP ?? UP
+        LiftDown,             // CMD_LIFT_DOWN ?? DOWN
+        SystemReset,          // CMD_SYSTEM_RESET ?? reboot?
+        Left,                 //    вперёд
+        Right,                //    Назад
         MoveDistanceForward,  // CMD_MOVE_DIST_F (с параметром)
         MoveDistanceBackward  // CMD_MOVE_DIST_R (с параметром)
     }

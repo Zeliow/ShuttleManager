@@ -14,11 +14,14 @@ public static class LegacyCommandMapper
             ShuttleCommand.Unload => $"{shuttleId}dUnld_",
             ShuttleCommand.LongUnload => $"{shuttleId}dLUnld",
             ShuttleCommand.Demo => $"{shuttleId}dDemo_",
+            ShuttleCommand.SystemReset => $"{shuttleId}RBT",
             ShuttleCommand.Reset => $"{shuttleId}dReset",
             ShuttleCommand.SaveConfig => $"{shuttleId}dSaveC",
             ShuttleCommand.Calibrate => $"{shuttleId}dClbr_",
-            ShuttleCommand.SealForward => $"{shuttleId}dComFo",
-            ShuttleCommand.SealBackward => $"{shuttleId}dComBa",
+            ShuttleCommand.SealForward => $"{shuttleId}dComFo", //Уплотение вперёд
+            ShuttleCommand.SealBackward => $"{shuttleId}dComBa", //Уплотение назад
+            ShuttleCommand.LiftUp => $"{shuttleId}dUp___",
+            ShuttleCommand.LiftDown => $"{shuttleId}dDown_",
             _ => throw new NotSupportedException()
         };
     }
