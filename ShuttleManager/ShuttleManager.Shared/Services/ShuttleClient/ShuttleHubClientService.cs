@@ -107,7 +107,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             return null;
         }
 
-        //механизм подключения к шаттлу 
+        //механизм подключения к шаттлу
         public async Task ConnectToShuttleAsync(string ipAddress, int port)
         {
             lock (_lock) { } // Keeping existing lock pattern
@@ -116,7 +116,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
             try
             {
-                Debug.WriteLine("Старт TCP контакта для прямого подключнения");             
+                Debug.WriteLine("Старт TCP контакта для прямого подключнения");
 
                 connection.TcpClient = new TcpClient();
                 await connection.TcpClient.ConnectAsync(ipAddress, port);
@@ -132,7 +132,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 OnConnected(ipAddress, connection.ShuttleId);
 
                 connection.ReceiveCts = new CancellationTokenSource();
-                connection.ReceiveTask = Task.Run(async () => 
+                connection.ReceiveTask = Task.Run(async () =>
                     await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
 
                 lock (_lock)
