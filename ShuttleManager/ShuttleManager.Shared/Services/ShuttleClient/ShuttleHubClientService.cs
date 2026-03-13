@@ -10,6 +10,24 @@ using System.Text;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient
 {
+    public enum ShuttleProtocolType
+    {
+        /// <summary>
+        /// Standart value of protocol
+        /// </summary>
+        Unknown,
+
+        /// <summary>
+        /// Value for legacy protocol
+        /// </summary>
+        Legacy,
+
+        /// <summary>
+        /// New Realization binaty protocol
+        /// </summary>
+        Binary
+    }
+
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     {
         // Protocol V2 constants for frame parsing
@@ -38,6 +56,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             public string IpAddress { get; set; } = string.Empty;
             public readonly MemoryStream ReceiveBuffer = new();
             public byte NextSeq { get; set; } = 0;
+            public ShuttleProtocolType Protocol { get; set; } = ShuttleProtocolType.Unknown;
         }
 
         public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000)
@@ -210,6 +229,16 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
         public async Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs = 1000)
         {
+            Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync(string) is deprecated. Use SendBinaryCommandAsync.");
+            if (!_connections.TryGetValue(ipAddress, out var connection))
+                return false;
+
+            if (connection.Protocol == ShuttleProtocolType.Legacy)
+            {
+                return await SendLegacyCommand(connection, command);
+            }
+
+            return false;
             // Legacy method wrapper - assumes command string maps to something,
             // but since we moved to binary, we should ideally use SendBinaryCommandAsync.
             // For now, let's just log or ignore if we can't map it.
@@ -224,11 +253,39 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             // or try to send binary if we can guess.
             // Actually, I should update the Interface to remove this or change it.
             // For now, I'll keep it for compilation compatibility but it won't work with binary protocol.
-            Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync(string) is deprecated. Use SendBinaryCommandAsync.");
-            return false;
+        }
+
+        private async Task<bool> SendLegacyCommand(ShuttleConnection connection, string command)
+        {
+            var data = Encoding.UTF8.GetBytes(command + "\n");
+
+            await connection.NetworkStream!.WriteAsync(data);
+            await connection.NetworkStream.FlushAsync();
+
+            return true;
         }
 
         public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
+
+        private void DetectProtocol(ShuttleConnection connection)
+        {
+            var data = connection.ReceiveBuffer.ToArray();
+
+            if (data.Length >= 2 &&
+                data[0] == PROTOCOL_SYNC_1_V2 &&
+                data[1] == PROTOCOL_SYNC_2_V2)
+            {
+                connection.Protocol = ShuttleProtocolType.Binary;
+                Debug.WriteLine($"Protocol V2 detected: {connection.IpAddress}");
+                return;
+            }
+
+            if (data.Any(b => b == '\n'))
+            {
+                connection.Protocol = ShuttleProtocolType.Legacy;
+                Debug.WriteLine($"Legacy protocol detected: {connection.IpAddress}");
+            }
+        }
 
         private async Task ReceiveLoopAsync(ShuttleConnection connection, CancellationToken cancellationToken)
         {
@@ -248,6 +305,12 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     }
 
                     connection.ReceiveBuffer.Write(buffer, 0, bytesRead);
+
+                    if (connection.Protocol == ShuttleProtocolType.Unknown)
+                    {
+                        DetectProtocol(connection);
+                    }
+
                     ProcessBuffer(connection);
                 }
                 catch (OperationCanceledException)
@@ -265,6 +328,47 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         }
 
         private void ProcessBuffer(ShuttleConnection connection)
+        {
+            switch (connection.Protocol)
+            {
+                case ShuttleProtocolType.Binary:
+                    ProcessBinaryBuffer(connection);
+                    break;
+
+                case ShuttleProtocolType.Legacy:
+                    ProcessLegacyBuffer(connection);
+                    break;
+            }
+        }
+
+        private void ProcessLegacyBuffer(ShuttleConnection connection)
+        {
+            var data = connection.ReceiveBuffer.ToArray();
+            int newline = Array.IndexOf(data, (byte)'\n');
+
+            if (newline < 0)
+                return;
+
+            string line = Encoding.UTF8.GetString(data, 0, newline).Trim();
+
+            HandleLegacyLine(connection, line);
+
+            connection.ReceiveBuffer.SetLength(0);
+            connection.ReceiveBuffer.Write(data, newline + 1, data.Length - newline - 1);
+        }
+
+        private void HandleLegacyLine(ShuttleConnection connection, string line)
+        {
+            var msg = new RawLogMessage
+            {
+                Level = LogLevel.LOG_INFO,
+                Text = line
+            };
+
+            OnLogReceived(connection.IpAddress, msg);
+        }
+
+        private void ProcessBinaryBuffer(ShuttleConnection connection)
         {
             byte[] data = connection.ReceiveBuffer.ToArray();
             int offset = 0;
