@@ -31,6 +31,19 @@ public interface IShuttleHubClientService
 
     public Task<bool> SendCommandToShuttleAsync(string ipAddress, string command, int timeoutMs);
 
+    // NEW REALIZATION FOR TWICE PROTOCOL
+    Task<bool> SendCommandAsync(
+    string ip,
+    ShuttleCommand command,
+    int arg1 = 0,
+    int arg2 = 0);
+
+    // NEW REALIZATION FOR TWICE PROTOCOL
+    Task<bool> SendConfigAsync(
+    string ip,
+    ShuttleConfigCommand param,
+    int value);
+
     public Task<bool> SendBinaryCommandAsync(string ipAddress, CmdType cmd, int arg1 = 0, int arg2 = 0, int timeoutMs = 1000);
 
     public Task<bool> SendDateTimeAsync(string ipAddress, DateTime utcTime, int timeoutMs = 1000);

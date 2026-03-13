@@ -1,5 +1,6 @@
 using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Protocol;
+using ShuttleManager.Shared.Services.ShuttleClient.Config;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -26,6 +27,38 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         /// New Realization binaty protocol
         /// </summary>
         Binary
+    }
+
+    public enum ShuttleConfigCommand
+    {
+        ReverseMode,          // CFG_REVERSE_MODE
+        MaxSpeed,             // CFG_MAX_SPEED
+        MinBattery,           // CFG_MIN_BATT
+        InterPalletDistance,  // CFG_INTER_PALLET
+        ChannelOffset,        // CFG_CHNL_OFFSET
+        ShuttleLength,        // CFG_SHUTTLE_LEN
+        ShuttleNumber         // CFG_SHUTTLE_NUM
+    }
+
+    public enum ShuttleCommand
+    {
+        Stop,
+        Load,
+        LongLoad,
+        Unload,
+        LongUnload,           // CMD_LONG_UNLOAD
+        Demo,                 // CMD_DEMO
+        Reset,                // CMD_RESET_ERROR
+        SaveConfig,           // CMD_SAVE_EEPROM
+        Calibrate,            // CMD_CALIBRATE
+        Home,                 // CMD_HOME
+        SealForward,          // CMD_COMPACT_F
+        SealBackward,         // CMD_COMPACT_R
+        LiftUp,               // CMD_LIFT_UP
+        LiftDown,             // CMD_LIFT_DOWN
+        SystemReset,          // CMD_SYSTEM_RESET
+        MoveDistanceForward,  // CMD_MOVE_DIST_F (с параметром)
+        MoveDistanceBackward  // CMD_MOVE_DIST_R (с параметром)
     }
 
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
@@ -263,6 +296,10 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             await connection.NetworkStream.FlushAsync();
 
             return true;
+        }
+
+        private async Task<bool> SendLegacyConfig(ShuttleConnection connection, string command, int value)
+        {
         }
 
         public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
@@ -690,5 +727,82 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         private void OnDisconnected(string ip) => Disconnected?.Invoke(ip);
 
         private void OnLogReceived(string ip, ShuttleMessageBase msg) => LogReceived?.Invoke(ip, msg);
+
+        public async Task<bool> SendCommandAsync(
+            string ip,
+            ShuttleCommand command,
+            int arg1 = 0,
+            int arg2 = 0)
+        {
+            if (!_connections.TryGetValue(ip, out var conn))
+                return false;
+
+            switch (conn.Protocol)
+            {
+                case ShuttleProtocolType.Binary:
+
+                    var cmd = BinaryCommandMapper.Map(command);
+
+                    return await SendBinaryCommandAsync(
+                        ip,
+                        cmd,
+                        arg1,
+                        arg2);
+
+                case ShuttleProtocolType.Legacy:
+
+                    var text = LegacyCommandMapper.Map(
+                        conn.ShuttleId,
+                        command);
+
+                    return await SendLegacyCommand(conn, text);
+
+                default:
+                    return false;
+            }
+        }
+
+        public async Task<bool> SendConfigAsync(
+            string ip,
+            ShuttleConfigCommand param,
+            int value)
+        {
+            if (!_connections.TryGetValue(ip, out var conn))
+                return false;
+
+            switch (conn.Protocol)
+            {
+                case ShuttleProtocolType.Binary:
+
+                    var cmd = BinaryCommandMapper.Map(param);
+
+                    return await SendConfigSetAsync(ip, param, value);
+
+                case ShuttleProtocolType.Legacy:
+
+                    var text = LegacyCommandMapper.Map(
+                        conn.ShuttleId,
+                        command);
+
+                    return await SendLegacyConfig(conn, text);
+
+                default:
+                    return false;
+            }
+
+            var configParamId = param switch
+            {
+                ShuttleConfigCommand.ReverseMode => ConfigParamID.CFG_REVERSE_MODE,
+                ShuttleConfigCommand.MaxSpeed => ConfigParamID.CFG_MAX_SPEED,
+                ShuttleConfigCommand.MinBattery => ConfigParamID.CFG_MIN_BATT,
+                ShuttleConfigCommand.InterPalletDistance => ConfigParamID.CFG_INTER_PALLET,
+                ShuttleConfigCommand.ChannelOffset => ConfigParamID.CFG_CHNL_OFFSET,
+                ShuttleConfigCommand.ShuttleLength => ConfigParamID.CFG_SHUTTLE_LEN,
+                ShuttleConfigCommand.ShuttleNumber => ConfigParamID.CFG_SHUTTLE_NUM,
+                _ => throw new ArgumentOutOfRangeException(nameof(param), param, "Неизвестный параметр конфигурации")
+            };
+
+            return await SendConfigSetAsync(ip, configParamId, value);
+        }
     }
 }
