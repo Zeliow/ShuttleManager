@@ -37,6 +37,7 @@ public static class BinaryCommandMapper
             ShuttleCommand.LongUnload => CmdType.CMD_LONG_UNLOAD,
             ShuttleCommand.Demo => CmdType.CMD_DEMO,
             ShuttleCommand.Reset => CmdType.CMD_SYSTEM_RESET,
+            ShuttleCommand.SaveConfig => CmdType.CMD_SAVE_EEPROM,
             ShuttleCommand.Calibrate => CmdType.CMD_CALIBRATE,
             _ => throw new NotSupportedException()
         };
