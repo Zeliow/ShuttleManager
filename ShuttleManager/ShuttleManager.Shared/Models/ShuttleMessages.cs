@@ -36,7 +36,7 @@ namespace ShuttleManager.Shared.Models
                 $"DistPlitR: {Data.DistancePltR}, " +
                 $"DistPlitF: {Data.DistancePltF}, " +
                 $"Temp: {Data.Temperature_dC / 10.0:F1}C, " +
-                $"Angle: {Data.Angle}, " +
+                $"Angle: {Data.Angle * (360.0 / 4096.0):F2}, " +
                 $"LifterCurrent: {Data.LifterCurrent}, " +
                 $"HardwareFlags: {Data.HardwareFlags}";
         }

@@ -811,7 +811,7 @@
         Shuttle.ReverseDistance = data.DistanceR;
         Shuttle.ForwardPalletDistance = data.DistancePltF;
         Shuttle.ReversePalletDistance = data.DistancePltR;
-        Shuttle.Angle = data.Angle;
+        Shuttle.Angle = data.Angle * (360.0 / 4096.0);
         Shuttle.Temperature = data.Temperature_dC / 10.0;
 
         // Map Hardware Flags
