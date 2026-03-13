@@ -68,43 +68,46 @@
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small text-muted">Ошибка:</label>
-                        <p class="small text-muted" style="margin-bottom: 0px;">@Shuttle.ErrorCode</p>
+                        <p class="small text-muted" style="margin-bottom: 0px;">
+                            @if (Shuttle.ErrorCode != ShuttleFault.FAULT_NONE)
+                                @Shuttle.ErrorCode
+                            </p>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="container-fluid" style="padding: 0px;">
-                <div class="row">
-                    <div class="col-md-8 ">
-                        <div class="card mb-2">
-                            <div class="card-body p-2">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label>
-                                        @SwitchLabelView()
-                                    </label>
-                                    <div>
-                                        <button class="btn btn-sm btn-outline-info me-1"
-                                                @onclick="SensorView"
-                                                title="Переключить отображение">
-                                            <b class="bi bi-speedometer2">👁</b>
-                                        </button>
+                <div class="container-fluid" style="padding: 0px;">
+                    <div class="row">
+                        <div class="col-md-8 ">
+                            <div class="card mb-2">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label>
+                                            @SwitchLabelView()
+                                        </label>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-info me-1"
+                                                    @onclick="SensorView"
+                                                    title="Переключить отображение">
+                                                <b class="bi bi-speedometer2">👁</b>
+                                            </button>
 
-                                        @* <button class="btn btn-sm btn-outline-warning me-1"
+                                            @* <button class="btn btn-sm btn-outline-warning me-1"
                                                 @onclick="TopScadaView">
                                             <b class="bi bi-speedometer2">?</b>
                                         </button> *@
 
-                                        <button class="btn btn-sm btn-outline-info me-1"
-                                                @onclick="StatsView">
-                                            <b class="bi bi-graph-up">📊</b>
-                                        </button>
-
-                                        @if (!_showSensorsView && !_statsView)
-                                        {
-                                            <button class="btn btn-sm btn-outline-danger me-1"
-                                                    @onclick="ClearTerminal">
-                                                ❌
+                                            <button class="btn btn-sm btn-outline-info me-1"
+                                                    @onclick="StatsView">
+                                                <b class="bi bi-graph-up">📊</b>
                                             </button>
-                                        }
+
+                                            @if (!_showSensorsView && !_statsView)
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger me-1"
+                                                        @onclick="ClearTerminal">
+                                                    ❌
+                                                </button>
+                                            }
                                     </div>
                                 </div>
                                 @if (_showSensorsView)
@@ -730,6 +733,17 @@
         return Path.Combine(dir, fileName);
     }
 
+    private string GetAllLogPath(string ip)
+    {
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "logs", ip, "all");
+
+        Directory.CreateDirectory(baseDir);
+
+        var fileName = $"{DateTime.Now:yyyy_MM_dd}.txt";
+
+        return Path.Combine(baseDir, fileName);
+    }
+
     private readonly SemaphoreSlim _logLock = new(1, 1);
 
     private void OnLogReceived(string ip, ShuttleMessageBase msg)
@@ -742,15 +756,17 @@
         if (!IsEventForThisShuttle(ip)) return;
 
         var formattedString = msg.ToFormattedTerminalString();
+        var timestamp = $"[{DateTime.Now:HH:mm:ss}] ";
 
-        var path = GetLogPath(ip, msg);
+        var typePath = GetLogPath(ip, msg);
+        var allPath = GetAllLogPath(ip);
 
         await _logLock.WaitAsync();
         try
         {
-            await File.AppendAllTextAsync(
-                path,
-                $"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
+            var line = $"{timestamp}{formattedString}\n";
+            await File.AppendAllTextAsync(typePath, line);
+            await File.AppendAllTextAsync(allPath, line);
         }
         finally
         {
@@ -766,7 +782,7 @@
 
             if (msg is RawLogMessage or AckMessage or ConfigMessage)
             {
-                LogToTerminal($"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
+                LogToTerminal($"{timestamp}{formattedString}\n");
             }
             StateHasChanged();
         });
