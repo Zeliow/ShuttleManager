@@ -294,6 +294,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         private async Task<bool> SendLegacyCommand(ShuttleConnection connection, string command)
         {
             var data = Encoding.UTF8.GetBytes(command + "\n");
+            Debug.WriteLine($"Command: {command}");
 
             await connection.NetworkStream!.WriteAsync(data);
             await connection.NetworkStream.FlushAsync();
@@ -329,6 +330,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             if (data.Any(b => b == '\n'))
             {
                 connection.Protocol = ShuttleProtocolType.Legacy;
+                //connection.ShuttleId = 
                 Debug.WriteLine($"Legacy protocol detected: {connection.IpAddress}");
             }
         }
@@ -390,17 +392,29 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         private void ProcessLegacyBuffer(ShuttleConnection connection)
         {
             var data = connection.ReceiveBuffer.ToArray();
-            int newline = Array.IndexOf(data, (byte)'\n');
 
-            if (newline < 0)
-                return;
+            int start = 0;
 
-            string line = Encoding.UTF8.GetString(data, 0, newline).Trim();
+            while (true)
+            {
+                int newline = Array.IndexOf(data, (byte)'\n', start);
 
-            HandleLegacyLine(connection, line);
+                if (newline < 0)
+                    break;
+
+                int length = newline - start;
+
+                var line = Encoding.UTF8.GetString(data, start, length).Trim();
+
+                HandleLegacyLine(connection, line);
+
+                start = newline + 1;
+            }
 
             connection.ReceiveBuffer.SetLength(0);
-            connection.ReceiveBuffer.Write(data, newline + 1, data.Length - newline - 1);
+
+            if (start < data.Length)
+                connection.ReceiveBuffer.Write(data, start, data.Length - start);
         }
 
         private void HandleLegacyLine(ShuttleConnection connection, string line)

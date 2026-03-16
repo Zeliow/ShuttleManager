@@ -88,11 +88,6 @@
                                             <b class="bi bi-speedometer2">👁</b>
                                         </button>
 
-                                        @* <button class="btn btn-sm btn-outline-warning me-1"
-                                                @onclick="TopScadaView">
-                                            <b class="bi bi-speedometer2">?</b>
-                                        </button> *@
-
                                         <button class="btn btn-sm btn-outline-info me-1"
                                                 @onclick="StatsView">
                                             <b class="bi bi-graph-up">📊</b>
@@ -111,10 +106,6 @@
                                 {
                                     <ShuttleDataSensorComponent Shuttle="Shuttle" />
                                 }
-                                @*                                 else if (_showTopView)
-                                {
-                                    <ShuttleScadaView Shuttle="Shuttle" />
-                                } *@
                                 else if (_statsView)
                                 {
                                     <ShuttleStatsComponent Shuttle="Shuttle" />
@@ -248,10 +239,6 @@
                                                     <i class="bi bi-play-circle me-1"></i>Демо
                                                 </button>
                                             </div>
-                                            @* <div class="col-4 mb-1">
-                                                <button class="btn btn-info btn-sm w-100 p-2" style="visibility:hidden;" @onclick="SendDemoCommand" disabled>
-                                                </button>
-                                            </div> *@
                                             <div class="col-4 mb-1">
                                                 <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendUpShuttleCommand" title="Движение вперёд">
                                                     <i class="bi bi-arrow-up-square me-1"></i>вверх
@@ -264,13 +251,6 @@
                                                     <i class="bi bi-download me-1"></i>Реверс 🔄
                                                 </button>
                                             </div>
-                                            @*  <div class="col-4 mb-1">
-                                                <button class="btn btn-warning btn-sm w-100 p-2"
-                                                        style="background-color: @(isReversed ? "green" : "red"); visibility:hidden;"
-                                                        @onclick="SendReverseShuttleCommand"
-                                                        disabled>
-                                                </button>
-                                            </div> *@
                                             <div class="col-4">
                                                 <button class="btn btn-primary btn-sm w-100 p-2" @* @onclick="SendLeftShuttleCommand" *@ title="Движение влево">
                                                     <i class="bi bi-arrow-left-square me-1"></i>назад
@@ -383,13 +363,6 @@
                                         <h6 class="fw-bold text-muted mb-0">Обновление</h6>
                                     </div>
                                     <div class="card-body p-2">
-                                        @*
-                                        <button @onclick="ChoiceFile">Select .bin</button>
-
-                                        @if (_selectedFile != null)
-                                        {
-                                        <p>@_selectedFile</p>*@
-
                                         <div class="row g-1">
                                             <div class="col-6 mb-1" style="text-align: center;">
                                                 <button class="btn btn-warning btn-sm w-100" disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
@@ -404,8 +377,6 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        @*  } *@
-
                                         @if (_isOtaRunning)
                                         {
                                             <div class="ota-box">
@@ -480,21 +451,15 @@
     private string pathLogShuttle = "";
 
     private readonly List<string> _statusBlockLines = new();
-    //private bool _inStatusBlock = false;
-
     private string? _selectedFile;
     private int _otaPercent;
     private bool _isOtaRunning;
     private string _otaStatus = "";
     private CancellationTokenSource? _otaCts;
 
-    //private int _otaPercent;
     private int _displayPercent;
-    //private string _otaStatus = string.Empty;
     private string _otaPhaseText = string.Empty;
-    //private bool _isOtaRunning;
     private bool _isCancelling;
-    //private CancellationTokenSource? _otaCts;
 
     private void OnOtaProgressChanged(int percent)
     {
@@ -535,18 +500,12 @@
 
     // Отображение сенсоров
     private bool _showSensorsView = false;
-    private bool _showTopView = false;
     private bool _statsView = false;
 
     private void SensorView()
     {
         _showSensorsView = !_showSensorsView;
         _statsView = false;
-    }
-
-    private void TopScadaView()
-    {
-        _showTopView = !_showTopView;
     }
 
     private void StatsView()
