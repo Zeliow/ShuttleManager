@@ -6,6 +6,7 @@
 @using ShuttleManager.Shared.Services
 @inject IShuttleHubClientService HubClientService
 @using ShuttleManager.Shared.Models
+@implements IAsyncDisposable
 
 <div class="container-fluid">
     <div class="row">
@@ -95,7 +96,7 @@
                     var activeShuttle = _connectedShuttles[ActiveTabIndex];
                     <div class="tab-content">
                         <div class="tab-pane active">
-                            <ShuttleHubControlComponent Shuttle="activeShuttle"
+                            <ShuttleHubControlComponent @key="activeShuttle.IPAddress" Shuttle="activeShuttle"
                                                         OnDisconnected="OnShuttleDisconnected" />
                         </div>
                     </div>
@@ -295,7 +296,7 @@
 
     private bool IsAlreadyConnected(string ipAddress) => _connectedShuttles.Any(s => s.IPAddress == ipAddress);
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         HubClientService.Connected -= OnShuttleConnected;
         HubClientService.Disconnected -= OnShuttleDisconnected;
