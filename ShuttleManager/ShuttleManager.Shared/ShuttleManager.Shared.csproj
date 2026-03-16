@@ -21,8 +21,4 @@
     </Compile>
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Services\ShuttleClient\Parsing\" />
-  </ItemGroup>
-
 </Project>

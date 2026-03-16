@@ -1,6 +1,7 @@
 using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.ShuttleClient.Config;
+using ShuttleManager.Shared.Services.ShuttleClient.Parsing;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -404,13 +405,21 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
         private void HandleLegacyLine(ShuttleConnection connection, string line)
         {
-            var msg = new RawLogMessage
-            {
-                Level = LogLevel.LOG_INFO,
-                Text = line
-            };
+            var parsed = LegacyParser.Parse(line);
 
-            OnLogReceived(connection.IpAddress, msg);
+            if (parsed != null)
+            {
+                OnLogReceived(connection.IpAddress, parsed);
+            }
+            else
+            {
+                OnLogReceived(connection.IpAddress,
+                    new RawLogMessage
+                    {
+                        Level = LogLevel.LOG_INFO,
+                        Text = line
+                    });
+            }
         }
 
         private void ProcessBinaryBuffer(ShuttleConnection connection)
