@@ -252,7 +252,7 @@
                                                 </button>
                                             </div>
                                             <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @* @onclick="SendLeftShuttleCommand" *@ title="Движение влево">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendLeftShuttleCommand" title="Движение влево">
                                                     <i class="bi bi-arrow-left-square me-1"></i>назад
                                                 </button>
                                             </div>
@@ -262,7 +262,7 @@
                                                 </button>
                                             </div>
                                             <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @* @onclick="SendRightShuttleCommand" *@ title="Движение вправо">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendRightShuttleCommand" title="Движение вправо">
                                                     <i class="bi bi-arrow-right-square me-1"></i>вперёд
                                                 </button>
                                             </div>
@@ -954,21 +954,26 @@
     private async Task SendUpShuttleCommand()
         => await SendCommand(ShuttleCommand.LiftUp, "Подъём");
 
+    private async Task SendLeftShuttleCommand()
+        => await SendCommand(ShuttleCommand.Left, "Назад");
+
+    private async Task SendRightShuttleCommand()
+        => await SendCommand(ShuttleCommand.Right, "Вперёд");
+
     private async Task SendDownShuttleCommand()
         => await SendCommand(ShuttleCommand.LiftDown, "Спуск");
 
     private async Task SendRebootShuttleCommand()
         => await SendCommand(ShuttleCommand.SystemReset, "Reboot shuttle");
 
+    // config button with param
     private async Task SendSetMoveReverseShuttleCommand()
         => await SendCommand(
-            ShuttleCommand.MoveDistanceBackward,
-            $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм", MoveDistanceBackwardInput, 0);
+            ShuttleCommand.MoveDistanceBackward, $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм", MoveDistanceBackwardInput);
 
     private async Task SendMoveForwardShuttleCommand()
         => await SendCommand(
-            ShuttleCommand.MoveDistanceForward,
-            $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм", MoveDistanceForwardInput, 0);
+            ShuttleCommand.MoveDistanceForward, $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм", MoveDistanceForwardInput);
 
     // === Конфигурационные команды ===
 
@@ -1004,7 +1009,7 @@
 
     private async Task SendSetDistanceOfEdgeShuttleCommand()
         => await SendConfigCommand(
-            ShuttleConfigCommand.ChannelOffset, DistanceOfEdge,
+            ShuttleConfigCommand.DistOfEdge, DistanceOfEdge,
             $"Установка расстояния от края: {DistanceOfEdge} мм");
 
     private async Task SendSetlenghtOfShuttleCommand()
@@ -1079,12 +1084,11 @@
 
             LogToTerminal("[CMD] Установка времени\n");
 
-            var success = await HubClientService.SendDateTimeAsync(
+            await HubClientService.SetDateTimeAsync(
                 Shuttle.IPAddress,
                 DateTime.UtcNow);
 
-            if (!success)
-                LogToTerminal("[WARNING] Установка времени не подтверждена\n");
+            LogToTerminal("[WARNING] Установка времени\n");
         }
         catch (Exception ex)
         {
@@ -1100,21 +1104,25 @@
 
     private async Task SendManualCommand()
     {
-        if (!string.IsNullOrWhiteSpace(_manualCommand))
+        if (string.IsNullOrWhiteSpace(_manualCommand))
+            return;
+
+        var cmd = _manualCommand.Trim();
+
+        if (Enum.TryParse(cmd, true, out CmdType result))
         {
-            // Try to parse command? Or just send raw?
-            // Since we don't have text command support, we can't do much.
-            // Maybe user enters "5" for stop?
-            if (Enum.TryParse(_manualCommand, true, out CmdType result))
-            {
-                await SendBinaryCmd(result, 0, 0, "Ручная команда");
-            }
-            else
-            {
-                LogToTerminal($"[ERROR] Неизвестная команда '{_manualCommand}'. Введите имя команды (например, CMD_STOP)\n");
-            }
-            _manualCommand = "";
+            await SendBinaryCmd(result, 0, 0, "Ручная команда");
         }
+        else
+        {
+            await HubClientService.SendCommandToShuttleAsync(
+                Shuttle.IPAddress!,
+                cmd, 1000);
+            LogToTerminal($"[ERROR] Неизвестная команда '{_manualCommand}'. Введите имя команды (например, CMD_STOP)\n");
+            LogToTerminal($"[LEGACY] >> {cmd}\n");
+        }
+
+        _manualCommand = "";
     }
 
     private async Task HandleKeyPress(KeyboardEventArgs e)

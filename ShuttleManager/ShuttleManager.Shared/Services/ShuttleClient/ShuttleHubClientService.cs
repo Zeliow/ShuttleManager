@@ -33,13 +33,16 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
     public enum ShuttleConfigCommand
     {
+        MoveDistanceForward,  // CMD_MOVE_DIST_F (с параметром)
+        MoveDistanceBackward,  // CMD_MOVE_DIST_R (с параметром)
         ReverseMode,          // CFG_REVERSE_MODE
         MaxSpeed,             // CFG_MAX_SPEED
         MinBattery,           // CFG_MIN_BATT
         InterPalletDistance,  // CFG_INTER_PALLET
-        ChannelOffset,        // CFG_CHNL_OFFSET
+        DistOfEdge,        // CFG_CHNL_OFFSET
         ShuttleLength,        // CFG_SHUTTLE_LEN
-        ShuttleNumber         // CFG_SHUTTLE_NUM
+        ShuttleNumber,         // CFG_SHUTTLE_NUM
+        DT,                    // DataTime set
     }
 
     public enum ShuttleCommand
@@ -59,10 +62,10 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         LiftUp,               // CMD_LIFT_UP ?? UP
         LiftDown,             // CMD_LIFT_DOWN ?? DOWN
         SystemReset,          // CMD_SYSTEM_RESET ?? reboot?
-        Left,                 //    вперёд
-        Right,                //    Назад
+        Left,                 //    Назад
+        Right,                //    вперёд
         MoveDistanceForward,  // CMD_MOVE_DIST_F (с параметром)
-        MoveDistanceBackward  // CMD_MOVE_DIST_R (с параметром)
+        MoveDistanceBackward,  // CMD_MOVE_DIST_R (с параметром)
     }
 
     public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
@@ -206,24 +209,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
         }
 
-        public Task<bool> SendDateTimeAsync(
-            string ipAddress,
-            DateTime utcTime,
-            int timeoutMs = 1000)
-        {
-            var packet = new DateTimePacket
-            {
-                Year = (byte)(utcTime.Year - 2000),
-                Month = (byte)utcTime.Month,
-                Day = (byte)utcTime.Day,
-                Hour = (byte)utcTime.Hour,
-                Minute = (byte)utcTime.Minute,
-                Second = (byte)utcTime.Second
-            };
-
-            return SendPacketAsync(ipAddress, MsgID.MSG_SET_DATETIME, packet, timeoutMs);
-        }
-
         public Task<bool> SendBinaryCommandAsync(
             string ipAddress,
             CmdType cmd,
@@ -279,20 +264,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
 
             return false;
-            // Legacy method wrapper - assumes command string maps to something,
-            // but since we moved to binary, we should ideally use SendBinaryCommandAsync.
-            // For now, let's just log or ignore if we can't map it.
-            // OR: We can send it as a raw text line if the device supports it?
-            // The protocol definition implies ONLY binary frames.
-            // So we must map string to CmdType if possible.
-            // But this method signature is fixed by Interface (which we will update).
-            // I'll leave it as a placeholder that fails or tries to map basic commands.
-
-            // NOTE: The UI calls this with "dStop_", etc.
-            // I will implement a basic mapping in UI component, but here let's just return false
-            // or try to send binary if we can guess.
-            // Actually, I should update the Interface to remove this or change it.
-            // For now, I'll keep it for compilation compatibility but it won't work with binary protocol.
         }
 
         private async Task<bool> SendLegacyCommand(ShuttleConnection connection, string command)
@@ -309,6 +280,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         private async Task<bool> SendLegacyConfig(ShuttleConnection connection, string command)
         {
             var data = Encoding.UTF8.GetBytes(command + "\n");
+            Debug.WriteLine($"Command: {command}");
 
             await connection.NetworkStream!.WriteAsync(data);
             await connection.NetworkStream.FlushAsync();
@@ -766,6 +738,36 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         private void OnDisconnected(string ip) => Disconnected?.Invoke(ip);
 
         private void OnLogReceived(string ip, ShuttleMessageBase msg) => LogReceived?.Invoke(ip, msg);
+
+        public async Task<bool> SetDateTimeAsync(string ipAddress, DateTime utcTime, int timeoutMs = 1000)
+        {
+            if (!_connections.TryGetValue(ipAddress, out var connection))
+                return false;
+
+            if (connection.Protocol == ShuttleProtocolType.Legacy)
+            {
+                var cmd = $"DT{utcTime:HH:mm:ss dd/MM/yyyy}\n";
+                return await SendLegacyCommand(connection, cmd);
+            }
+            else
+            {
+                var packet = new DateTimePacket
+                {
+                    Year = (byte)(utcTime.Year - 2000),
+                    Month = (byte)utcTime.Month,
+                    Day = (byte)utcTime.Day,
+                    Hour = (byte)utcTime.Hour,
+                    Minute = (byte)utcTime.Minute,
+                    Second = (byte)utcTime.Second
+                };
+
+                return await SendPacketAsync(
+                    ipAddress,
+                    MsgID.MSG_SET_DATETIME,
+                    packet,
+                    1000);
+            }
+        }
 
         public async Task<bool> SendCommandAsync(
             string ip,

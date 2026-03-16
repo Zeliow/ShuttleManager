@@ -46,7 +46,7 @@ public interface IShuttleHubClientService
 
     public Task<bool> SendBinaryCommandAsync(string ipAddress, CmdType cmd, int arg1 = 0, int arg2 = 0, int timeoutMs = 1000);
 
-    public Task<bool> SendDateTimeAsync(string ipAddress, DateTime utcTime, int timeoutMs = 1000);
+    public Task<bool> SetDateTimeAsync(string ipAddress, DateTime utcTime, int timeoutMs = 1000);
 
     public Task<bool> SendConfigSetAsync(string ipAddress, ConfigParamID param, int value, int timeoutMs = 1000);
 

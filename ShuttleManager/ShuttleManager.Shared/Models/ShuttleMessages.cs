@@ -33,7 +33,7 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[STATS] TotalDist: {Data.TotalDist}m, Loads: {Data.LoadCounter}";
+            return $"[STATS] TotalDist: {Data.TotalDist}m, Loads: {Data.LoadCounter}, Lenght: {Data.le}";
         }
     }
 
