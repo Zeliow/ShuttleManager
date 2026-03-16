@@ -4,7 +4,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient.Config;
 
 public static class LegacyCommandMapper
 {
-    public static string Map(int shuttleId, ShuttleCommand cmd)
+    public static string Map(string shuttleId, ShuttleCommand cmd)
     {
         return cmd switch
         {
@@ -49,7 +49,7 @@ public static class BinaryCommandMapper
 
 public static class LegacyConfigMapper
 {
-    public static string Map(int shuttleId, ShuttleConfigCommand cmd, int value)
+    public static string Map(string shuttleId, ShuttleConfigCommand cmd, int value)
     {
         return cmd switch
         {

@@ -638,7 +638,7 @@
         return ipAddress == Shuttle.IPAddress;
     }
 
-    private async void OnHubConnected(string ip, int id)
+    private async void OnHubConnected(string ip, string id)
     {
         if (!IsEventForThisShuttle(ip)) return;
 

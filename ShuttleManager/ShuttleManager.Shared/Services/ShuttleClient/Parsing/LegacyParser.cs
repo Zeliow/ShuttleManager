@@ -13,153 +13,230 @@ public static class LegacyParser
     private static SensorPacket _sensor = new();
     private static StatsPacket _stats = new();
 
-    // Парсинг одной строки — возвращает список сообщений
+    // Главный метод парсинга строки
     public static List<ShuttleMessageBase> Parse(string line)
     {
-        var result = new List<ShuttleMessageBase>();
-        if (string.IsNullOrWhiteSpace(line)) return result;
+        var messages = new List<ShuttleMessageBase>();
+        if (string.IsNullOrWhiteSpace(line)) return messages;
 
-        ParseTelemetry(line, result);
-        ParseSensors(line, result);
-        ParseStats(line, result);
+        ParseTelemetry(line, messages);
+        ParseSensors(line, messages);
+        ParseStats(line, messages);
 
-        return result;
+        return messages;
     }
 
-    private static void ParseTelemetry(string line, List<ShuttleMessageBase> result)
+    #region Telemetry Parsing
+
+    private static void ParseTelemetry(string line, List<ShuttleMessageBase> messages)
     {
-        // Batt voltage / Charge
-        if (line.Contains("Batt voltage"))
+        try
         {
-            try
+            // Batt voltage / Charge
+            if (line.Contains("Batt voltage"))
             {
-                var voltagePart = line.Split('V')[0].Split('=')[1].Trim();
-                _telemetry.BatteryVoltage_mV = (ushort)(double.Parse(voltagePart, CultureInfo.InvariantCulture) * 1000);
-
-                var chargeIndex = line.IndexOf("Charge", StringComparison.Ordinal);
-                if (chargeIndex >= 0)
+                var match = Regex.Match(line, @"Batt voltage = ([\d.]+)V Charge = (\d+)%");
+                if (match.Success)
                 {
-                    var chargeStr = line.Substring(chargeIndex).Split('=')[1].Replace("%", "").Trim();
-                    _telemetry.BatteryCharge = byte.Parse(chargeStr);
+                    _telemetry.BatteryVoltage_mV = (ushort)(double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) * 1000);
+                    _telemetry.BatteryCharge = byte.Parse(match.Groups[2].Value);
+                    messages.Add(new TelemetryMessage { Data = _telemetry });
                 }
-
-                result.Add(new TelemetryMessage { Data = _telemetry });
             }
-            catch { /* игнорируем кривые строки */ }
-        }
 
-        // Status
-        if (line.Contains("Status"))
-        {
-            int start = line.IndexOf("(");
-            int end = line.IndexOf(")");
-            if (start > 0 && end > start)
+            // Shuttle number / length
+            if (line.Contains("Shuttle number"))
             {
-                if (int.TryParse(line.Substring(start + 1, end - (start + 1)), out int state))
-                    _telemetry.ShuttleStatus = (ShuttleState)state;
+                var match = Regex.Match(line, @"Shuttle number = (\d+)\s+Shuttle length = (\d+)");
+                if (match.Success)
+                {
+                    _telemetry.ShuttleNumber = byte.Parse(match.Groups[1].Value);
+                    messages.Add(new TelemetryMessage { Data = _telemetry });
+                }
+            }
 
-                result.Add(new TelemetryMessage { Data = _telemetry });
+            // Status
+            if (line.Contains("Status"))
+            {
+                var match = Regex.Match(line, @"Status = (.+?)\s+\((\d+)\)");
+                if (match.Success)
+                {
+                    _telemetry.ShuttleStatus = (ShuttleState)int.Parse(match.Groups[2].Value);
+                    messages.Add(new TelemetryMessage { Data = _telemetry });
+                }
+            }
+
+            // Inverse / FIFO_LIFO
+            if (line.Contains("Inverse") || line.Contains("FIFO_LIFO"))
+            {
+                if (line.Contains("Inverse = YES")) _telemetry.StateFlags |= 8;
+                else _telemetry.StateFlags &= 0xFF - 8;
+
+                if (line.Contains("FIFO_LIFO = LIFO")) _telemetry.StateFlags |= 4;
+                else _telemetry.StateFlags &= 0xFF - 4;
+
+                messages.Add(new TelemetryMessage { Data = _telemetry });
+            }
+
+            // In channel
+            if (line.Contains("In channel"))
+            {
+                if (line.Contains("YES")) _telemetry.StateFlags |= 16;
+                else _telemetry.StateFlags &= 0xFF - 16;
+
+                messages.Add(new TelemetryMessage { Data = _telemetry });
+            }
+
+            // Lifter
+            if (line.Contains("Lifter"))
+            {
+                if (line.Contains("UP: YES")) _telemetry.StateFlags |= 1;
+                else _telemetry.StateFlags &= 0xFF - 1;
+
+                if (line.Contains("DOWN: YES")) _telemetry.StateFlags |= 2;
+                else _telemetry.StateFlags &= 0xFF - 2;
+
+                messages.Add(new TelemetryMessage { Data = _telemetry });
+            }
+
+            // Angle / Length / Position
+            if (line.Contains("Angle") && line.Contains("Lenght") && line.Contains("position"))
+            {
+                var match = Regex.Match(line, @"Angle = (\d+)\s*\|\s*Lenght = (\d+)\s*\|\s*position = (\d+)");
+                if (match.Success)
+                {
+                    _telemetry.CurrentPosition = ushort.Parse(match.Groups[3].Value);
+                    messages.Add(new TelemetryMessage { Data = _telemetry });
+                }
+            }
+
+            // Temperature
+            if (line.Contains("Temperature"))
+            {
+                var match = Regex.Match(line, @"Temperature = ([\d.]+)");
+                if (match.Success)
+                {
+                    double temp = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+                    _telemetry.StateFlags |= 0; // оставляем для совместимости
+                    messages.Add(new TelemetryMessage { Data = _telemetry });
+                }
             }
         }
-
-        // Inverse / FIFO_LIFO
-        if (line.Contains("Inverse") || line.Contains("FIFO_LIFO"))
-        {
-            if (line.Contains("Inverse = YES"))
-                _telemetry.StateFlags |= 8;
-            else
-                _telemetry.StateFlags &= 0xFF - 8;
-
-            if (line.Contains("FIFO_LIFO = LIFO"))
-                _telemetry.StateFlags |= 4;
-            else
-                _telemetry.StateFlags &= 0xFF - 4;
-
-            result.Add(new TelemetryMessage { Data = _telemetry });
-        }
-
-        // In channel
-        if (line.Contains("In channel"))
-        {
-            if (line.Contains("YES"))
-                _telemetry.StateFlags |= 16;
-            else
-                _telemetry.StateFlags &= 0xFF - 16;
-
-            result.Add(new TelemetryMessage { Data = _telemetry });
-        }
-
-        // Lifter
-        if (line.Contains("Lifter"))
-        {
-            if (line.Contains("UP: YES")) _telemetry.StateFlags |= 1;
-            else _telemetry.StateFlags &= 0xFF - 1;
-
-            if (line.Contains("DOWN: YES")) _telemetry.StateFlags |= 2;
-            else _telemetry.StateFlags &= 0xFF - 2;
-
-            result.Add(new TelemetryMessage { Data = _telemetry });
-        }
+        catch { /* Игнорируем некорректные строки */ }
     }
 
-    private static void ParseSensors(string line, List<ShuttleMessageBase> result)
+    #endregion Telemetry Parsing
+
+    #region Sensor Parsing
+
+    private static void ParseSensors(string line, List<ShuttleMessageBase> messages)
     {
         try
         {
             // Forward / Reverse distance
             if (line.Contains("Forwrd dist"))
             {
-                var parts = line.Split('|');
-                _sensor.DistanceF = ushort.Parse(parts[0].Split('=')[1].Trim());
-                _sensor.DistanceR = ushort.Parse(parts[1].Split('=')[1].Trim());
-
-                result.Add(new SensorMessage { Data = _sensor });
+                var match = Regex.Match(line, @"Forwrd dist = (\d+)\s*\|\s*Revrs dist = (\d+)");
+                if (match.Success)
+                {
+                    _sensor.DistanceF = ushort.Parse(match.Groups[1].Value);
+                    _sensor.DistanceR = ushort.Parse(match.Groups[2].Value);
+                    messages.Add(new SensorMessage { Data = _sensor });
+                }
             }
 
             // Forward / Reverse pallet distance
             if (line.Contains("Forwrd plt dist"))
             {
-                var parts = line.Split('|');
-                _sensor.DistancePltF = ushort.Parse(parts[0].Split('=')[1].Trim());
-                _sensor.DistancePltR = ushort.Parse(parts[1].Split('=')[1].Trim());
+                var match = Regex.Match(line, @"Forwrd plt dist = (\d+)\s*\|\s*Revrs plt dist = (\d+)");
+                if (match.Success)
+                {
+                    _sensor.DistancePltF = ushort.Parse(match.Groups[1].Value);
+                    _sensor.DistancePltR = ushort.Parse(match.Groups[2].Value);
+                    messages.Add(new SensorMessage { Data = _sensor });
+                }
+            }
 
-                result.Add(new SensorMessage { Data = _sensor });
+            // Pallet detectors
+            if (line.Contains("Plt dtchk"))
+            {
+                var match = Regex.Match(line, @"Plt dtchk (F1|R1) = (\d+)\s*\|\s*Plt dtchk (F2|R2) = (\d+)");
+                if (match.Success)
+                {
+                    var side = match.Groups[1].Value.StartsWith("F") ? "F" : "R";
+                    int det1 = int.Parse(match.Groups[2].Value);
+                    int det2 = int.Parse(match.Groups[4].Value);
+
+                    if (side == "F")
+                    {
+                        _sensor.DistancePltF = (ushort)det1;
+                        _sensor.DistancePltR = (ushort)det2;
+                    }
+                    else
+                    {
+                        _sensor.DistancePltF = (ushort)det1;
+                        _sensor.DistancePltR = (ushort)det2;
+                    }
+
+                    messages.Add(new SensorMessage { Data = _sensor });
+                }
             }
 
             // Angle
             if (line.Contains("Angle"))
             {
-                _sensor.Angle = ushort.Parse(line.Split('=')[1].Trim());
-                result.Add(new SensorMessage { Data = _sensor });
+                var match = Regex.Match(line, @"Angle = (\d+)");
+                if (match.Success)
+                {
+                    _sensor.Angle = ushort.Parse(match.Groups[1].Value);
+                    messages.Add(new SensorMessage { Data = _sensor });
+                }
             }
 
             // Temperature
             if (line.Contains("Temperature"))
             {
-                double temp = double.Parse(line.Split('=')[1].Trim(), CultureInfo.InvariantCulture);
-                _sensor.Temperature_dC = (short)(temp * 10);
-                result.Add(new SensorMessage { Data = _sensor });
+                var match = Regex.Match(line, @"Temperature = ([\d.]+)");
+                if (match.Success)
+                {
+                    _sensor.Temperature_dC = (short)(double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) * 10);
+                    messages.Add(new SensorMessage { Data = _sensor });
+                }
             }
         }
-        catch { /* игнорируем ошибки парсинга */ }
+        catch { /* Игнорируем */ }
     }
 
-    private static void ParseStats(string line, List<ShuttleMessageBase> result)
+    #endregion Sensor Parsing
+
+    #region Stats Parsing
+
+    private static void ParseStats(string line, List<ShuttleMessageBase> messages)
     {
         try
         {
             if (line.Contains("Load counter"))
             {
-                _stats.LoadCounter = uint.Parse(line.Split('=')[1].Trim());
-                result.Add(new StatsMessage { Data = _stats });
+                var match = Regex.Match(line, @"Load counter = (\d+)");
+                if (match.Success)
+                {
+                    _stats.LoadCounter = uint.Parse(match.Groups[1].Value);
+                    messages.Add(new StatsMessage { Data = _stats });
+                }
             }
 
             if (line.Contains("Unload counter"))
             {
-                _stats.UnloadCounter = uint.Parse(line.Split('=')[1].Trim());
-                result.Add(new StatsMessage { Data = _stats });
+                var match = Regex.Match(line, @"Unload counter = (\d+)");
+                if (match.Success)
+                {
+                    _stats.UnloadCounter = uint.Parse(match.Groups[1].Value);
+                    messages.Add(new StatsMessage { Data = _stats });
+                }
             }
         }
-        catch { /* игнорируем */ }
+        catch { /* Игнорируем */ }
     }
+
+    #endregion Stats Parsing
 }

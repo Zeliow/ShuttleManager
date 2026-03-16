@@ -255,7 +255,7 @@
         Debug.WriteLine($"[INFO] Запрошено отключение от {ipAddress}\n");
     }
 
-    private void OnShuttleConnected(string ipAddress, int shuttleId)
+    private void OnShuttleConnected(string ipAddress, string shuttleId)
     {
         InvokeAsync(() =>
         {

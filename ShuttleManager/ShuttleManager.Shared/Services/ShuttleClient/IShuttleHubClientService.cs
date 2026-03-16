@@ -8,7 +8,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient;
 public class ConnectedShuttleInfo
 {
     public string IpAddress { get; set; } = string.Empty;
-    public int ShuttleId { get; set; } = -1;
+    public string ShuttleId { get; set; } = string.Empty;
     public bool IsConnected { get; set; } = false;
     public double BatteryVoltage { get; set; } = -1.0;
     public int BatteryPercentage { get; set; } = 0;
@@ -21,7 +21,7 @@ public interface IShuttleHubClientService
 {
     event Action<string, ShuttleMessageBase>? LogReceived;        // Передаёт IP и лог
 
-    event Action<string, int>? Connected;              // Передаёт IP и ID шаттла
+    event Action<string, string>? Connected;              // Передаёт IP и ID шаттла
 
     event Action<string>? Disconnected;                // Передаёт IP
 

@@ -75,7 +75,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
 
         public event Action<string, ShuttleMessageBase>? LogReceived;
 
-        public event Action<string, int>? Connected;
+        public event Action<string, string>? Connected;
 
         public event Action<string>? Disconnected;
 
@@ -90,7 +90,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             public Stream? NetworkStream { get; set; }
             public CancellationTokenSource? ReceiveCts { get; set; }
             public Task? ReceiveTask { get; set; }
-            public int ShuttleId { get; set; } = -1;
+            public string ShuttleId { get; set; } = string.Empty;
             public string IpAddress { get; set; } = string.Empty;
             public readonly MemoryStream ReceiveBuffer = new();
             public byte NextSeq { get; set; } = 0;
@@ -185,7 +185,9 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 connection.NetworkStream = connection.TcpClient.GetStream();
 
                 // Initialize the connection with a default shuttle ID before receiving the first heartbeat
-                connection.ShuttleId = int.Parse(shuttleNums[(int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131)]); // Will be updated when first heartbeat arrives
+
+                connection.ShuttleId = shuttleNums[(int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131)]; // Will be updated when first heartbeat arrives
+
                 OnConnected(ipAddress, connection.ShuttleId);
 
                 connection.ReceiveCts = new CancellationTokenSource();
@@ -419,26 +421,26 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 connection.ReceiveBuffer.Write(data, start, data.Length - start);
         }
 
-        private async void HandleLegacyLine(ShuttleConnection connection, string line)
+        private void HandleLegacyLine(ShuttleConnection connection, string line)
         {
+            if (string.IsNullOrWhiteSpace(line)) return;
+
             // Парсим строку в один или несколько сообщений
             var messages = LegacyParser.Parse(line);
 
-            // Если есть разобранные сообщения — кидаем их в ProcessLogAsync
+            // Всегда добавляем raw пакет
+            var raw = new RawLogMessage
+            {
+                Level = LogLevel.LOG_INFO,
+                Text = line
+            };
+
+            messages.Add(raw);
+
+            // Отправляем все сообщения через OnLogReceived
             foreach (var msg in messages)
             {
                 OnLogReceived(connection.IpAddress, msg);
-            }
-
-            // Если парсер ничего не вернул — создаем RawLogMessage
-            if (!messages.Any())
-            {
-                var raw = new RawLogMessage
-                {
-                    Level = LogLevel.LOG_INFO,
-                    Text = line
-                };
-                OnLogReceived(connection.IpAddress, raw);
             }
         }
 
@@ -682,9 +684,9 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                         message = new TelemetryMessage { Data = packet };
 
                         // Update shuttle ID from heartbeat if not already set
-                        if (connection.ShuttleId == -1)
+                        if (connection.ShuttleId == "-1")
                         {
-                            connection.ShuttleId = (int)packet.ShuttleNumber;
+                            connection.ShuttleId = Convert.ToString(packet.ShuttleNumber);
                         }
                     }
                     break;
@@ -759,7 +761,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             return crc;
         }
 
-        private void OnConnected(string ip, int id) => Connected?.Invoke(ip, id);
+        private void OnConnected(string ip, string id) => Connected?.Invoke(ip, id);
 
         private void OnDisconnected(string ip) => Disconnected?.Invoke(ip);
 
@@ -821,7 +823,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                         conn.ShuttleId,
                         param, value);
 
-                    if (param == ShuttleConfigCommand.ShuttleNumber) conn.ShuttleId = value;
+                    if (param == ShuttleConfigCommand.ShuttleNumber) conn.ShuttleId = Convert.ToString(value);
 
                     return await SendLegacyConfig(conn, text);
 
