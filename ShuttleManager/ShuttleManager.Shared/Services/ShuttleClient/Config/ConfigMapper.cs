@@ -14,7 +14,7 @@ public static class LegacyCommandMapper
             ShuttleCommand.Unload => $"{shuttleId}dUnld_",
             ShuttleCommand.LongUnload => $"{shuttleId}dLUnld",
             ShuttleCommand.Demo => $"{shuttleId}dDemo_",
-            ShuttleCommand.SystemReset => $"{shuttleId}RBT",
+            ShuttleCommand.SystemReset => "RBT",
             ShuttleCommand.Reset => $"{shuttleId}dReset",
             ShuttleCommand.SaveConfig => $"{shuttleId}dSaveC",
             ShuttleCommand.Calibrate => $"{shuttleId}dClbr_",

@@ -4,6 +4,7 @@ using ShuttleManager.Shared.Services.ShuttleClient.Config;
 using ShuttleManager.Shared.Services.ShuttleClient.Parsing;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Data;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -81,6 +82,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
         private readonly Dictionary<string, ShuttleConnection> _connections = [];
         private readonly ConcurrentDictionary<byte, TaskCompletionSource<bool>> _ackWaiters = new();
         private readonly object _lock = new();
+        private string[] shuttleNums = { "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32" };
 
         private class ShuttleConnection
         {
@@ -183,7 +185,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 connection.NetworkStream = connection.TcpClient.GetStream();
 
                 // Initialize the connection with a default shuttle ID before receiving the first heartbeat
-                connection.ShuttleId = -1; // Will be updated when first heartbeat arrives
+                connection.ShuttleId = int.Parse(shuttleNums[(int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131)]); // Will be updated when first heartbeat arrives
                 OnConnected(ipAddress, connection.ShuttleId);
 
                 connection.ReceiveCts = new CancellationTokenSource();
@@ -330,7 +332,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             if (data.Any(b => b == '\n'))
             {
                 connection.Protocol = ShuttleProtocolType.Legacy;
-                //connection.ShuttleId = 
+                //connection.ShuttleId =
                 Debug.WriteLine($"Legacy protocol detected: {connection.IpAddress}");
             }
         }
@@ -417,22 +419,26 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                 connection.ReceiveBuffer.Write(data, start, data.Length - start);
         }
 
-        private void HandleLegacyLine(ShuttleConnection connection, string line)
+        private async void HandleLegacyLine(ShuttleConnection connection, string line)
         {
-            var parsed = LegacyParser.Parse(line);
+            // Парсим строку в один или несколько сообщений
+            var messages = LegacyParser.Parse(line);
 
-            if (parsed != null)
+            // Если есть разобранные сообщения — кидаем их в ProcessLogAsync
+            foreach (var msg in messages)
             {
-                OnLogReceived(connection.IpAddress, parsed);
+                OnLogReceived(connection.IpAddress, msg);
             }
-            else
+
+            // Если парсер ничего не вернул — создаем RawLogMessage
+            if (!messages.Any())
             {
-                OnLogReceived(connection.IpAddress,
-                    new RawLogMessage
-                    {
-                        Level = LogLevel.LOG_INFO,
-                        Text = line
-                    });
+                var raw = new RawLogMessage
+                {
+                    Level = LogLevel.LOG_INFO,
+                    Text = line
+                };
+                OnLogReceived(connection.IpAddress, raw);
             }
         }
 
@@ -814,6 +820,8 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
                     var text = LegacyConfigMapper.Map(
                         conn.ShuttleId,
                         param, value);
+
+                    if (param == ShuttleConfigCommand.ShuttleNumber) conn.ShuttleId = value;
 
                     return await SendLegacyConfig(conn, text);
 
