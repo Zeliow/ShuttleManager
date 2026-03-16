@@ -246,7 +246,7 @@
                                             </div>
                                             <div class="col-4 mb-1">
                                                 <button class="btn btn-sm w-100 p-2 @(isReversed ? "btn-warning" : "btn-danger")"
-                                                        @onclick="SendReverseShuttleCommand"
+                                                        @onclick="SendUseReverseModeShuttleCommand"
                                                         title="Реверс">
                                                     <i class="bi bi-download me-1"></i>Реверс 🔄
                                                 </button>
@@ -971,9 +971,21 @@
             $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм", MoveDistanceForwardInput, 0);
 
     // === Конфигурационные команды ===
+
+    private bool isReversed = false;
     private async Task SendUseReverseModeShuttleCommand()
-        => await SendConfigCommand(
-            ShuttleConfigCommand.ReverseMode, 1, "Реверс режим");
+    {
+        if (!isReversed)
+        {
+            await SendConfigCommand(ShuttleConfigCommand.ReverseMode, 1, "Реверс режим ON");
+            isReversed = !isReversed;
+        }
+        else
+        {
+            await SendConfigCommand(ShuttleConfigCommand.ReverseMode, 0, "Реверс режим OFF");
+            isReversed = !isReversed;
+        }
+    }
 
     private async Task SendSetMaxSpeedShuttleCommand()
         => await SendConfigCommand(
@@ -1037,6 +1049,20 @@
     //private async Task SendSetlenghtOfShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_SHUTTLE_LEN, LenghtOfShuttle, $"Установка длины шаттла: {LenghtOfShuttle} мм");
     //private async Task SendSetShuttleNumCommand() => await SendConfigSet(ConfigParamID.CFG_SHUTTLE_NUM, ShuttleNumberInput, $"Установка номера шаттла: {ShuttleNumberInput}");
 
+    // private async Task SendReverseShuttleCommand()
+    // {
+    //     if (!isReversed)
+    //     {
+    //         isReversed = true;
+    //         await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 1, "Реверс режим on");
+    //     }
+    //     else
+    //     {
+    //         await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 0, "Реверс режим off");
+    //         isReversed = false;
+    //     }
+    // }
+
     private async Task SetTime()
     {
         if (!Shuttle.IsConnected || Shuttle.IPAddress is null)
@@ -1069,21 +1095,6 @@
         {
             _isCommandInProgress = false;
             StateHasChanged();
-        }
-    }
-
-    private bool isReversed = false;
-    private async Task SendReverseShuttleCommand()
-    {
-        if (!isReversed)
-        {
-            isReversed = true;
-            await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 1, "Реверс режим on");
-        }
-        else
-        {
-            await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 0, "Реверс режим off");
-            isReversed = false;
         }
     }
 
