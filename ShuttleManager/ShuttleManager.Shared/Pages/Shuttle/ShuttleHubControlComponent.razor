@@ -792,6 +792,7 @@
     {
         Shuttle.LastActivity = DateTime.Now;
         Shuttle.ErrorCode = (ShuttleFault)data.ErrorCode;
+        Shuttle.WarningCode = data.WarningCode;
         Shuttle.CurrentStatus = ((ShuttleState)data.ShuttleStatus).ToString();
         Shuttle.Position = data.CurrentPosition;
         Shuttle.CurrentSpeed = data.Speed;

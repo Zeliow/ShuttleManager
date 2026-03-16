@@ -176,6 +176,7 @@ namespace ShuttleManager.Shared.Models.Protocol
     public struct TelemetryPacket
     {
         public ushort ErrorCode;
+        public ushort WarningCode;
         public ushort CurrentPosition;  // mm
         public ushort Speed;
         public ushort BatteryVoltage_mV;// 12500 = 12.5V
