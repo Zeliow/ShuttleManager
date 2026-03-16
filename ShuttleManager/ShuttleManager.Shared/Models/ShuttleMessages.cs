@@ -13,7 +13,8 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[TELEMETRY] Position: {Data.CurrentPosition}mm, " +
+            return
+                $"[TELEMETRY] Position: {Data.CurrentPosition}mm, " +
                 $"Speed: {Data.Speed}%, " +
                 $"BatteryVoltage: {Data.BatteryVoltage_mV / 1000.0:F1}V, " +
                 $"BatteryCharge: {Data.BatteryCharge}%, " +
@@ -32,7 +33,8 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[SENSORS] DistF: {Data.DistanceF}mm, " +
+            return
+                $"[SENSORS] DistF: {Data.DistanceF}mm, " +
                 $"DistR: {Data.DistanceR}mm, " +
                 $"DistPlitR: {Data.DistancePltR}, " +
                 $"DistPlitF: {Data.DistancePltF}, " +
@@ -49,7 +51,8 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[STATS] TotalDist: {Data.TotalDist / 1000.0}m, " +
+            return
+                $"[STATS] TotalDist: {Data.TotalDist / 1000.0}m, " +
                 $"Loads: {Data.LoadCounter} " +
                 $"Unloads: {Data.UnloadCounter}, " +
                 $"Compact: {Data.CompactCounter}, " +

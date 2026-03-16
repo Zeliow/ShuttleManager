@@ -1,9 +1,4 @@
 using ShuttleManager.Shared.Models.Protocol;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Net.Sockets;
-using System.Text;
 
 namespace ShuttleManager.Shared.Models;
 
@@ -12,12 +7,7 @@ public class Shuttle
     public string ShuttleNumber { get; set; } = "";
     public string? IPAddress { get; set; } = string.Empty;
     public int BatteryPercentage { get; set; } = 0;
-    public bool IsAutoLogging { get; set; }
-    public string? CurrentCommand { get; set; }
     public bool? Inverse { get; set; }
-    public TcpClient? Client { get; }
-    public bool LoggingStatus { get; set; }
-    public bool IsFormOpened { get; set; }
     public int CurrentSpeed { get; set; }
     public int MaxSpeed { get; set; }
     public int InterPalleteDistance { get; set; }
@@ -25,7 +15,6 @@ public class Shuttle
     public int BatteryLimit { get; set; }
     public double BatteryVoltage { get; set; } = 0.0;
     public bool IsConnected { get; set; } = false;
-    public string? LastReceivedData { get; set; }
     public string CurrentStatus { get; set; } = "Неизвестно";
     public ShuttleFault ErrorCode { get; set; }
     public int WarningCode { get; set; } = 0;
@@ -34,7 +23,6 @@ public class Shuttle
 
     public double Temperature { get; set; } = 0.0;
     public double Angle { get; set; } = 0;
-    public int Length { get; set; } = 0;
     public int Position { get; set; } = 0;
     public string FifoLifoMode { get; set; } = "Unknown";
     public int ForwardDistance { get; set; } = 0;
@@ -52,37 +40,27 @@ public class Shuttle
     public int BumperReverse { get; set; } = 0;
     public int ZeroPointMpr { get; set; } = 0;
     public int ChannelOffset { get; set; } = 0;
-    public int StatusCode { get; set; } = 0;
     public int WaitTimeUnload { get; set; } = 0;
-    public string ConnectionStatus { get; set; } = "Offline";
-    public DateTime LastConnectionCheck { get; set; } = DateTime.MinValue;
 
     // New stats properties
     public uint TotalDist { get; set; }
 
-    public uint TotalUptimeMinutes;
-    public ushort MotorStallCount;
-    public ushort LifterOverloadCount;
-    public ushort CrashCount;
-    public ushort WatchdogResets;
-    public ushort LowBatteryEvents;
-
-    public uint LifetimePalletsDetected;
-
+    public uint TotalUptimeMinutes { get; set; }
+    public ushort MotorStallCount { get; set; }
+    public ushort LifterOverloadCount { get; set; }
+    public ushort CrashCount { get; set; }
+    public ushort WatchdogResets { get; set; }
+    public ushort LowBatteryEvents { get; set; }
+    public uint LifetimePalletsDetected { get; set; }
     public uint LoadCounter { get; set; }
-
     public uint UnloadCounter { get; set; }
     public uint CompactCounter { get; set; }
     public uint LiftUpCounter { get; set; }
     public uint LiftDownCounter { get; set; }
-    public int PalleteCount { get; set; }
 
     // Raw flags
     public ushort StateFlags { get; set; }
 
-    public byte HardwareFlags { get; set; }
-
-    public string FullStatusBlock { get; set; } = "";
     private List<string> _terminalMessages = [];
 
     private readonly object _lock = new object();
