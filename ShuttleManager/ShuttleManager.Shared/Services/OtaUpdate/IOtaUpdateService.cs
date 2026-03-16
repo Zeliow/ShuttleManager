@@ -1,7 +1,6 @@
-﻿namespace ShuttleManager.Shared.Services.OtaUpdate
+﻿namespace ShuttleManager.Shared.Services.OtaUpdate;
+
+public interface IOtaUpdateService
 {
-    public interface IOtaUpdateService
-    {
-        Task<OtaResult> RunAsync(string ip, string filePath, OtaTarget target, IProgress<OtaProgress>? progress, CancellationToken token, bool fullErase = false);
-    }
+    public Task<OtaResult> RunAsync(string ip, string filePath, OtaTarget target, IProgress<OtaProgress>? progress, CancellationToken token, bool fullErase = false);
 }

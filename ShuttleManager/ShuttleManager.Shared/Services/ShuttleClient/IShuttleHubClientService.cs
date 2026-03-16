@@ -28,7 +28,7 @@ public interface IShuttleHubClientService
     //Binary protocol
     public Task<bool> SendConfigSetAsync(string ipAddress, ConfigParamID param, int value, int timeoutMs = 1000);
 
-    List<Shuttle> GetConnectedShuttles();
+    public List<Shuttle> GetConnectedShuttles();
 
     public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000);
 }
