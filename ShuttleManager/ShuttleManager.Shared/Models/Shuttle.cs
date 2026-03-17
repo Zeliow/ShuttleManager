@@ -4,6 +4,9 @@ namespace ShuttleManager.Shared.Models;
 
 public class Shuttle
 {
+    private const int TerminalLimit = 900;
+    private const int TerminalTarget = 500;
+
     private readonly object _lock = new object();
 
     public string ShuttleNumber { get; set; } = string.Empty;
@@ -53,6 +56,24 @@ public class Shuttle
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    private void PruneTerminalMessagesInternal()
+    {
+        if (_terminalMessages.Count > TerminalLimit)
+        {
+            _terminalMessages.RemoveRange(0, _terminalMessages.Count - TerminalTarget);
         }
     }
 
@@ -68,7 +89,10 @@ public class Shuttle
     {
         lock (_lock)
         {
-            _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
+            if (_terminalMessages.Count > TerminalTarget)
+            {
+                _terminalMessages.RemoveRange(0, _terminalMessages.Count - TerminalTarget);
+            }
         }
     }
 
