@@ -1,5 +1,6 @@
 using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Protocol;
+using ShuttleManager.Shared.Services.Enums;
 using System.Net;
 using System.Text.Json.Nodes;
 

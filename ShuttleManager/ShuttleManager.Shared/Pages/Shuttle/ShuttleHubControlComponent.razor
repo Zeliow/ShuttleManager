@@ -1,5 +1,7 @@
 @using System.Diagnostics
+@using ShuttleManager.Shared.Interfaces
 @using ShuttleManager.Shared.Services
+@using ShuttleManager.Shared.Services.Enums
 @using ShuttleManager.Shared.Services.FilePicker
 @using ShuttleManager.Shared.Services.OtaUpdate
 @using ShuttleManager.Shared.Services.ShuttleClient
@@ -12,6 +14,7 @@
 @inject ILogger<ShuttleHubControlComponent> Logger
 @inject IFilePickerService FilePickerService
 @inject IOtaUpdateService OtaService
+@inject IWebBrowserService WebBrowserService
 @implements IDisposable
 
 <div class="card mb-3">
@@ -185,9 +188,20 @@
                                                 <i class="bi bi-arrow-counterclockwise me-1">Сброс ошибок</i>
                                             </button>
                                         </div>
-                                        <div class="col-12">
+                                        <div class="col-12 mb-1">
                                             <button class="btn btn-danger btn-sm w-100 " @onclick="SendRebootShuttleCommand" title="Полная перезагрузка шаттла">
                                                 <b class="bi bi-arrow-repeat me-1">⟳</b>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 mb-1">
+                                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
+                                                <b class="bi bi-cloud-arrow-up me-1">Обновление экрана (UPD) (Browser)</b>
+                                            </button>
+                                        </div>
+
+                                        <div class="col-12 mb-1">
+                                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
+                                                <b class="bi bi-cloud-arrow-up me-1">Обновление платы (FRM) (Browser)</b>
                                             </button>
                                         </div>
                                     </div>
@@ -1119,7 +1133,7 @@
                 Shuttle.IPAddress!,
                 cmd, 1000);
             LogToTerminal($"[ERROR] Неизвестная команда '{_manualCommand}'. Введите имя команды (например, CMD_STOP)\n");
-            LogToTerminal($"[LEGACY] >> {cmd}\n");
+            LogToTerminal($"[LEGACY PROTOCOL] >> {cmd}\n");
         }
 
         _manualCommand = "";
@@ -1130,6 +1144,43 @@
         if (e.Key == "Enter")
         {
             await SendManualCommand();
+        }
+    }
+
+    private async Task SendFRMFirmwareCommand() => await SendUpdateCommandAndOpenBrowser();
+
+    private async Task SendUpdateStateShuttleCommand() => await SendUPDCommandAndOpenBrowser();
+
+    private async Task SendUpdateCommandAndOpenBrowser()
+    {
+        await HubClientService.SendCommandToShuttleAsync(Shuttle.IPAddress!, "FRM", 1000);
+        await OpenWebInterfaceAsync("FRM");
+    }
+
+    private async Task SendUPDCommandAndOpenBrowser()
+    {
+        await HubClientService.SendCommandToShuttleAsync(Shuttle.IPAddress!, "UPD", 1000);
+        await OpenWebInterfaceAsync("UPD");
+    }
+
+    private async Task OpenWebInterfaceAsync(string argOpenBrowser)
+    {
+        var url = $"http://{Shuttle.IPAddress}/";
+        if (argOpenBrowser == "UPD")
+        {
+            url += "update";
+        }
+
+        try
+        {
+            var uri = new Uri(url);
+            await WebBrowserService.OpenBrowserAsync(uri);
+            LogToTerminal($"[INFO] Открыт веб-интерфейс: {url}\n");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка открытия веб-интерфейса {Url}", url);
+            LogToTerminal($"[ERROR] Не удалось открыть браузер: {ex.Message}\n");
         }
     }
 
