@@ -1,4 +1,4 @@
-﻿namespace ShuttleManager.Shared.Services.FilePicker;
+﻿namespace ShuttleManager.Shared.Interfaces;
 
 public interface IFilePickerService
 {

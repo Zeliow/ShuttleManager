@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using ShuttleManager.Services;
 using ShuttleManager.Shared.Interfaces;
-using ShuttleManager.Shared.Services.FilePicker;
 using ShuttleManager.Shared.Services.OtaUpdate;
 using ShuttleManager.Shared.Services.ShuttleClient;
 

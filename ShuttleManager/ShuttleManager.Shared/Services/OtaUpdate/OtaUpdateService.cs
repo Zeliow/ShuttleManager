@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using ShuttleManager.Shared.Interfaces;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Sockets;

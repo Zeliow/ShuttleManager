@@ -1,4 +1,6 @@
-﻿namespace ShuttleManager.Shared.Services.OtaUpdate;
+﻿using ShuttleManager.Shared.Services.OtaUpdate;
+
+namespace ShuttleManager.Shared.Interfaces;
 
 public interface IOtaUpdateService
 {

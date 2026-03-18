@@ -1,10 +1,10 @@
-﻿using ShuttleManager.Shared.Models;
+﻿using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.Command;
 using ShuttleManager.Shared.Services.ShuttleClient.Config;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
-using ShuttleManager.Shared.Services.ShuttleClient.Parsing;
 using System.Diagnostics;
 using System.Text;
 

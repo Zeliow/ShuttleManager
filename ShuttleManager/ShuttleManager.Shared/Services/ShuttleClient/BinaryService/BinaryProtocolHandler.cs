@@ -1,4 +1,5 @@
-﻿using ShuttleManager.Shared.Models;
+﻿using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.Command;

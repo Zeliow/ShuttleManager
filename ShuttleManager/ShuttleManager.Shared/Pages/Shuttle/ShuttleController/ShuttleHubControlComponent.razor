@@ -1,17 +1,6 @@
-@using System.Diagnostics
-@using ShuttleManager.Shared.Interfaces
-@using ShuttleManager.Shared.Services
-@using ShuttleManager.Shared.Services.Enums
-@using ShuttleManager.Shared.Services.FilePicker
-@using ShuttleManager.Shared.Services.OtaUpdate
-@using ShuttleManager.Shared.Services.ShuttleClient
-@using System.Text.Json.Nodes
-@using ShuttleManager.Shared.Models
-@using ShuttleManager.Shared.Models.Protocol
-@using Microsoft.Extensions.Logging
 @inject IJSRuntime JSRuntime
-@inject IShuttleHubClientService HubClientService
 @inject ILogger<ShuttleHubControlComponent> Logger
+@inject IShuttleHubClientService HubClientService
 @inject IFilePickerService FilePickerService
 @inject IOtaUpdateService OtaService
 @inject IWebBrowserService WebBrowserService
@@ -1135,7 +1124,7 @@
         }
         else
         {
-            await HubClientService.DisconnectFromShuttle(Shuttle.IPAddress);
+            HubClientService.DisconnectFromShuttle(Shuttle.IPAddress);
             LogToTerminal("[INFO] Запрошено отключение\n");
             await OnDisconnected.InvokeAsync(Shuttle.IPAddress);
         }

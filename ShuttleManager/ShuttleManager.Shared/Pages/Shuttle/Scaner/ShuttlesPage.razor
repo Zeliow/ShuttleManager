@@ -1,12 +1,6 @@
 ﻿@page "/"
-@using System.Diagnostics
-@using System.Net
-@using ShuttleManager.Shared.Interfaces
-@using ShuttleManager.Shared.Services.ShuttleClient
 @inject IJSRuntime JSRuntime
-@using ShuttleManager.Shared.Services
 @inject IShuttleHubClientService HubClientService
-@using ShuttleManager.Shared.Models
 @implements IAsyncDisposable
 
 <div class="container-fluid">
@@ -230,7 +224,7 @@
 
     private async Task DisconnectShuttle(string ipAddress)
     {
-        await HubClientService.DisconnectFromShuttle(ipAddress);
+        HubClientService.DisconnectFromShuttle(ipAddress);
         Debug.WriteLine($"[INFO] Запрошено отключение от {ipAddress}\n");
     }
 

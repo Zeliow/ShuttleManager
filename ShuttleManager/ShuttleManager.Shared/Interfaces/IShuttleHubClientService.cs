@@ -15,7 +15,7 @@ public interface IShuttleHubClientService
 
     public Task ConnectToShuttleAsync(string ipAddress, int port);
 
-    public Task DisconnectFromShuttle(string ipAddress);
+    public void DisconnectFromShuttle(string ipAddress);
 
     public Task<bool> SendCommandAsync(string ip, ShuttleCommand command, int arg1 = 0, int arg2 = 0);
 

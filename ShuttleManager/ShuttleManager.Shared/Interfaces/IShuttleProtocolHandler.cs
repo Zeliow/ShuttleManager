@@ -1,7 +1,8 @@
 ﻿using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
+using ShuttleManager.Shared.Services.ShuttleClient;
 
-namespace ShuttleManager.Shared.Services.ShuttleClient;
+namespace ShuttleManager.Shared.Interfaces;
 
 public interface IShuttleProtocolHandler
 {

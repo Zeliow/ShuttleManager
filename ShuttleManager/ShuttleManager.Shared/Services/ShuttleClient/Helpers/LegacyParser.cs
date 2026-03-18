@@ -3,7 +3,7 @@ using ShuttleManager.Shared.Models.Protocol;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace ShuttleManager.Shared.Services.ShuttleClient.Parsing;
+namespace ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 
 public static class LegacyParser
 {
