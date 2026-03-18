@@ -7,13 +7,10 @@ using ShuttleManager.Shared.Services.ShuttleClient.Command;
 using ShuttleManager.Shared.Services.ShuttleClient.Config;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 using ShuttleManager.Shared.Services.ShuttleClient.LegacyService;
-using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
-using System.Text;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient;
 
@@ -114,26 +111,9 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         }
     }
 
-    //механизм подключения к шаттлу
     public async Task ConnectToShuttleAsync(string ipAddress, int port)
     {
-        lock (_lock) { }
-                if (_connections.TryGetValue(ipAddress, out var conn))
-                {
-                    return new ConnectedShuttleInfo
-                    {
-                        IpAddress = conn.IpAddress,
-                        IsConnected = conn.TcpClient?.Connected == true,
-                        ShuttleId = conn.ShuttleId
-                    };
-                }
-            }
-            return null;
-        }
-
-        public async Task ConnectToShuttleAsync(string ipAddress, int port)
-        {
-            lock (_lock) { } // Keeping existing lock pattern
+        lock (_lock) { } // Keeping existing lock pattern
 
         var connection = new ShuttleConnection { IpAddress = ipAddress };
 
@@ -153,6 +133,9 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             connection.ShuttleId = shuttleNums[(int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131)];
 
             OnConnected(ipAddress, connection.ShuttleId);
+        }
+        catch { }
+    }
 
     private async Task ReceiveLoopAsync(ShuttleConnection connection, CancellationToken cancellationToken)
     {
@@ -162,22 +145,6 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             try
             {
                 if (connection.Transport == null) break;
-            // Actually, I should update the Interface to remove this or change it.
-            // For now, I'll keep it for compilation compatibility but it won't work with binary protocol.
-            Debug.WriteLine($"[ShuttleHubClientService] SendCommandToShuttleAsync(string) is deprecated. Use SendBinaryCommandAsync.");
-            return false;
-        }
-
-        public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
-
-        private async Task ReceiveLoopAsync(ShuttleConnection connection, CancellationToken cancellationToken)
-        {
-            byte[] buffer = new byte[1024];
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    if (connection.NetworkStream == null) break;
 
                 int bytesRead = await connection.Transport.ReadAsync(buffer, cancellationToken);
                 if (bytesRead == 0)
@@ -281,7 +248,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         return await conn.Handler.SendManualCommandAsync(conn, rawCommand, CancellationToken.None, 1000);
     }
 
-    public void DisconnectFromShuttle(string ipAddress)
+    public async Task DisconnectFromShuttle(string ipAddress)
     {
         _ = InternalDisconnectAsync(ipAddress);
     }
