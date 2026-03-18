@@ -13,7 +13,17 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[TELEMETRY] Pos: {Data.CurrentPosition}mm, Spd: {Data.Speed}%, V: {Data.BatteryVoltage_mV / 1000.0:F1}V, Batt: {Data.BatteryCharge}%";
+            return
+                $"[TELEMETRY] Position: {Data.CurrentPosition}mm, " +
+                $"Speed: {Data.Speed}%, " +
+                $"BatteryVoltage: {Data.BatteryVoltage_mV / 1000.0:F1}V, " +
+                $"BatteryCharge: {Data.BatteryCharge}%, " +
+                $"Error Code: {Data.ErrorCode}, " +
+                $"Warning Code: {Data.WarningCode}, " +
+                $"StateFlags: {Data.StateFlags}, " +
+                $"ShuttleStatus: {Data.ShuttleStatus}, " +
+                $"ShuttleNumber: {Data.ShuttleNumber}, " +
+                $"PalletCount: {Data.PalletCount}";
         }
     }
 
@@ -23,7 +33,15 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[SENSORS] DistF: {Data.DistanceF}mm, DistR: {Data.DistanceR}mm, Temp: {Data.Temperature_dC / 10.0:F1}C";
+            return
+                $"[SENSORS] DistF: {Data.DistanceF}mm, " +
+                $"DistR: {Data.DistanceR}mm, " +
+                $"DistPlitR: {Data.DistancePltR}, " +
+                $"DistPlitF: {Data.DistancePltF}, " +
+                $"Temp: {Data.Temperature_dC / 10.0:F1}C, " +
+                $"Angle: {Data.Angle * (360.0 / 4096.0):F2}, " +
+                $"LifterCurrent: {Data.LifterCurrent}, " +
+                $"HardwareFlags: {Data.HardwareFlags}";
         }
     }
 
@@ -33,7 +51,20 @@ namespace ShuttleManager.Shared.Models
 
         public override string ToFormattedTerminalString()
         {
-            return $"[STATS] TotalDist: {Data.TotalDist}m, Loads: {Data.LoadCounter}";
+            return
+                $"[STATS] TotalDist: {Data.TotalDist / 1000.0}m, " +
+                $"Loads: {Data.LoadCounter} " +
+                $"Unloads: {Data.UnloadCounter}, " +
+                $"Compact: {Data.CompactCounter}, " +
+                $"LiftUp: {Data.LiftUpCounter}, " +
+                $"LiftDown: {Data.LiftDownCounter}, " +
+                $"LifeTimePalletDetected: {Data.LifetimePalletsDetected}, " +
+                $"TotalUpTimeMin: {Data.TotalUptimeMinutes}, " +
+                $"MotorStall: {Data.MotorStallCount}, " +
+                $"LiftOverload: {Data.LifterOverloadCount}, " +
+                $"Crash: {Data.CrashCount}, " +
+                $"WatchDogRes: {Data.WatchdogResets}, " +
+                $"LowBatteryEvents: {Data.LowBatteryEvents}";
         }
     }
 

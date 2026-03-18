@@ -297,8 +297,19 @@ public sealed class OtaUpdateService : IOtaUpdateService
 
 public enum OtaPhase
 {
+    /// <summary>
+    /// Upload
+    /// </summary>
     Upload,
+
+    /// <summary>
+    /// Flashing
+    /// </summary>
     Flashing,
+
+    /// <summary>
+    /// Finale
+    /// </summary>
     Finalizing
 }
 

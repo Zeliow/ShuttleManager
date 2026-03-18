@@ -6,6 +6,7 @@
 @using ShuttleManager.Shared.Services
 @inject IShuttleHubClientService HubClientService
 @using ShuttleManager.Shared.Models
+@implements IAsyncDisposable
 
 <div class="container-fluid">
     <div class="row">
@@ -64,29 +65,6 @@
                     }
                 </div>
             </div>
-
-            @*  @if (_connectedShuttles.Any())
-            {
-                <div class="card" style="margin-bottom: 15px;">
-                    <div class="card-header">
-                        <h6 style="margin-bottom:0px;">Подключенные устройства</h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-group list-group-flush">
-                            @foreach (var shuttle in _connectedShuttles)
-                            {
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>(@shuttle.IPAddress)</span>
-                                    <button class="btn btn-sm btn-danger"
-                                            @onclick="() => DisconnectShuttle(shuttle.IPAddress!)">
-                                        <i class="bi bi-power">Отключить</i>
-                                    </button>
-                                </li>
-                            }
-                        </ul>
-                    </div>
-                </div>
-            } *@
         </div>
 
         <div class="col-md-9">
@@ -118,7 +96,7 @@
                     var activeShuttle = _connectedShuttles[ActiveTabIndex];
                     <div class="tab-content">
                         <div class="tab-pane active">
-                            <ShuttleHubControlComponent Shuttle="activeShuttle"
+                            <ShuttleHubControlComponent @key="activeShuttle.IPAddress" Shuttle="activeShuttle"
                                                         OnDisconnected="OnShuttleDisconnected" />
                         </div>
                     </div>
@@ -251,7 +229,7 @@
 
     private async Task DisconnectShuttle(string ipAddress)
     {
-        HubClientService.DisconnectFromShuttle(ipAddress);
+        await HubClientService.DisconnectFromShuttleAsync(ipAddress);
         Debug.WriteLine($"[INFO] Запрошено отключение от {ipAddress}\n");
     }
 
@@ -318,7 +296,7 @@
 
     private bool IsAlreadyConnected(string ipAddress) => _connectedShuttles.Any(s => s.IPAddress == ipAddress);
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         HubClientService.Connected -= OnShuttleConnected;
         HubClientService.Disconnected -= OnShuttleDisconnected;

@@ -1,11 +1,7 @@
 ﻿using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using ShuttleManager.Platforms.Windows;
-using System.Diagnostics;
 using WinRT.Interop;
-
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
 
 namespace ShuttleManager.WinUI
 {
@@ -14,10 +10,6 @@ namespace ShuttleManager.WinUI
     /// </summary>
     public partial class App : MauiWinUIApplication
     {
-        /// <summary>
-        /// Initializes the singleton application object.  This is the first line of authored code
-        /// executed, and as such is the logical equivalent of main() or WinMain().
-        /// </summary>
         public App()
         {
             // Попытка перехватить необработанные исключения
@@ -25,7 +17,6 @@ namespace ShuttleManager.WinUI
             {
                 var exception = args.ExceptionObject as Exception;
                 Console.WriteLine($"[CRITICAL] Unhandled Exception: {exception?.Message}");
-                // Здесь можно записать ошибку в файл или отправить в аналитику
             };
 
             this.InitializeComponent();
@@ -37,10 +28,10 @@ namespace ShuttleManager.WinUI
         {
             base.OnLaunched(args);
 
-            var window = (Application.Windows.FirstOrDefault() as Microsoft.Maui.Controls.Window);
+            var window = Application.Windows.FirstOrDefault() as Microsoft.Maui.Controls.Window;
             if (window != null)
             {
-                window.Title = "Менеджер шаттлов B.V.5.1";
+                window.Title = "Менеджер шаттлов B.V.5.2.2";
 
                 var nativeWindow = window.Handler.PlatformView as Microsoft.UI.Xaml.Window;
                 if (nativeWindow != null)
@@ -51,7 +42,7 @@ namespace ShuttleManager.WinUI
 
                     if (appWindow != null)
                     {
-                        appWindow.Title = "Менеджер шаттлов B.V.5.1";
+                        appWindow.Title = "Менеджер шаттлов B.V.5.2.2";
 
                         var presenter = appWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
                         if (presenter != null)

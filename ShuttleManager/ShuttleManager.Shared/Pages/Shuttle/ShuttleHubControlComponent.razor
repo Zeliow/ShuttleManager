@@ -12,15 +12,12 @@
 @inject ILogger<ShuttleHubControlComponent> Logger
 @inject IFilePickerService FilePickerService
 @inject IOtaUpdateService OtaService
-@implements IDisposable
+@implements IAsyncDisposable
 
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
             Шаттл №: @SetCorrentNumberShuttle(Shuttle.ShuttleNumber)
-            <span class="badge @(IsConnected ? "bg-success" : "bg-warning") ms-2">
-                @(IsConnected ? "Подключен" : "Подключение...")
-            </span>
         </h5>
         <div>
             <button class="btn btn-sm btn-danger" @onclick="DisconnectThis" title="Отключиться">
@@ -68,43 +65,46 @@
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small text-muted">Ошибка:</label>
-                        <p class="small text-muted" style="margin-bottom: 0px;">@Shuttle.ErrorCode</p>
+                        <p class="small text-muted" style="margin-bottom: 0px;">
+                            @if (Shuttle.ErrorCode != ShuttleFault.FAULT_NONE)
+                                @Shuttle.ErrorCode
+                            </p>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="container-fluid" style="padding: 0px;">
-                <div class="row">
-                    <div class="col-md-8 ">
-                        <div class="card mb-2">
-                            <div class="card-body p-2">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label>
-                                        @SwitchLabelView()
-                                    </label>
-                                    <div>
-                                        <button class="btn btn-sm btn-outline-info me-1"
-                                                @onclick="SensorView"
-                                                title="Переключить отображение">
-                                            <b class="bi bi-speedometer2">👁</b>
-                                        </button>
+                <div class="container-fluid" style="padding: 0px;">
+                    <div class="row">
+                        <div class="col-md-8 ">
+                            <div class="card mb-2">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label>
+                                            @SwitchLabelView()
+                                        </label>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-info me-1"
+                                                    @onclick="SensorView"
+                                                    title="Переключить отображение">
+                                                <b class="bi bi-speedometer2">👁</b>
+                                            </button>
 
-                                        @* <button class="btn btn-sm btn-outline-warning me-1"
+                                            @* <button class="btn btn-sm btn-outline-warning me-1"
                                                 @onclick="TopScadaView">
                                             <b class="bi bi-speedometer2">?</b>
                                         </button> *@
 
-                                        <button class="btn btn-sm btn-outline-info me-1"
-                                                @onclick="StatsView">
-                                            <b class="bi bi-graph-up">📊</b>
-                                        </button>
-
-                                        @if (!_showSensorsView && !_statsView)
-                                        {
-                                            <button class="btn btn-sm btn-outline-danger me-1"
-                                                    @onclick="ClearTerminal">
-                                                ❌
+                                            <button class="btn btn-sm btn-outline-info me-1"
+                                                    @onclick="StatsView">
+                                                <b class="bi bi-graph-up">📊</b>
                                             </button>
-                                        }
+
+                                            @if (!_showSensorsView && !_statsView)
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger me-1"
+                                                        @onclick="ClearTerminal">
+                                                    ❌
+                                                </button>
+                                            }
                                     </div>
                                 </div>
                                 @if (_showSensorsView)
@@ -248,10 +248,6 @@
                                                     <i class="bi bi-play-circle me-1"></i>Демо
                                                 </button>
                                             </div>
-                                            @* <div class="col-4 mb-1">
-                                                <button class="btn btn-info btn-sm w-100 p-2" style="visibility:hidden;" @onclick="SendDemoCommand" disabled>
-                                                </button>
-                                            </div> *@
                                             <div class="col-4 mb-1">
                                                 <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendUpShuttleCommand" title="Движение вперёд">
                                                     <i class="bi bi-arrow-up-square me-1"></i>вверх
@@ -264,15 +260,8 @@
                                                     <i class="bi bi-download me-1"></i>Реверс 🔄
                                                 </button>
                                             </div>
-                                            @*  <div class="col-4 mb-1">
-                                                <button class="btn btn-warning btn-sm w-100 p-2"
-                                                        style="background-color: @(isReversed ? "green" : "red"); visibility:hidden;"
-                                                        @onclick="SendReverseShuttleCommand"
-                                                        disabled>
-                                                </button>
-                                            </div> *@
                                             <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @* @onclick="SendLeftShuttleCommand" *@ title="Движение влево">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendLeftShuttleCommand" title="Движение влево">
                                                     <i class="bi bi-arrow-left-square me-1"></i>назад
                                                 </button>
                                             </div>
@@ -282,7 +271,7 @@
                                                 </button>
                                             </div>
                                             <div class="col-4">
-                                                <button class="btn btn-primary btn-sm w-100 p-2" @* @onclick="SendRightShuttleCommand" *@ title="Движение вправо">
+                                                <button class="btn btn-primary btn-sm w-100 p-2" @onclick="SendRightShuttleCommand" title="Движение вправо">
                                                     <i class="bi bi-arrow-right-square me-1"></i>вперёд
                                                 </button>
                                             </div>
@@ -477,24 +466,17 @@
     private string ComponentId => _componentId;
     private string TerminalOutputHtml => _terminalOutputHtml;
     private string ManualCommand { get => _manualCommand; set => _manualCommand = value; }
-    private string pathLogShuttle = "";
-
     private readonly List<string> _statusBlockLines = new();
-    //private bool _inStatusBlock = false;
 
     private string? _selectedFile;
     private int _otaPercent;
     private bool _isOtaRunning;
     private string _otaStatus = "";
-    private CancellationTokenSource? _otaCts;
+    private CancellationTokenSource _otaCts;
 
-    //private int _otaPercent;
     private int _displayPercent;
-    //private string _otaStatus = string.Empty;
     private string _otaPhaseText = string.Empty;
-    //private bool _isOtaRunning;
     private bool _isCancelling;
-    //private CancellationTokenSource? _otaCts;
 
     private void OnOtaProgressChanged(int percent)
     {
@@ -535,18 +517,12 @@
 
     // Отображение сенсоров
     private bool _showSensorsView = false;
-    private bool _showTopView = false;
     private bool _statsView = false;
 
     private void SensorView()
     {
         _showSensorsView = !_showSensorsView;
         _statsView = false;
-    }
-
-    private void TopScadaView()
-    {
-        _showTopView = !_showTopView;
     }
 
     private void StatsView()
@@ -572,14 +548,11 @@
     {
         try
         {
-            if (!Directory.Exists($"{AppContext.BaseDirectory}/logs"))
-            {
-                Directory.CreateDirectory($"{AppContext.BaseDirectory}/logs");
-            }
+            Directory.CreateDirectory(
+            Path.Combine(AppContext.BaseDirectory, "logs"));
             HubClientService.Connected += OnHubConnected;
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.LogReceived += OnLogReceived;
-            pathLogShuttle = Path.Combine($"{AppContext.BaseDirectory}/logs", $"Shuttle_Log_Number_{DateTime.Now.Day}_{DateTime.Now.Month}_{DateTime.Now.Year}_{Shuttle.IPAddress}.txt");
             Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
             StateHasChanged();
         }
@@ -706,24 +679,67 @@
         });
     }
 
+    private static string GetMessageFolder(ShuttleMessageBase msg) =>
+        msg switch
+        {
+            TelemetryMessage => "telemetry",
+            SensorMessage => "sensors",
+            StatsMessage => "stats",
+            RawLogMessage => "raw",
+            ConfigMessage => "config",
+            AckMessage => "ack",
+            _ => "unknown"
+        };
+
+    private string GetLogPath(string ip, ShuttleMessageBase msg)
+    {
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "logs", ip);
+
+        var typeFolder = GetMessageFolder(msg);
+
+        var dir = Path.Combine(baseDir, typeFolder);
+
+        Directory.CreateDirectory(dir);
+
+        var fileName = $"{DateTime.Now:yyyy_MM_dd}.txt";
+
+        return Path.Combine(dir, fileName);
+    }
+
+    private string GetAllLogPath(string ip)
+    {
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "logs", ip, "all");
+
+        Directory.CreateDirectory(baseDir);
+
+        var fileName = $"{DateTime.Now:yyyy_MM_dd}.txt";
+
+        return Path.Combine(baseDir, fileName);
+    }
+
     private readonly SemaphoreSlim _logLock = new(1, 1);
 
     private void OnLogReceived(string ip, ShuttleMessageBase msg)
     {
         _ = ProcessLogAsync(ip, msg);
     }
+
     private async Task ProcessLogAsync(string ip, ShuttleMessageBase msg)
     {
         if (!IsEventForThisShuttle(ip)) return;
 
         var formattedString = msg.ToFormattedTerminalString();
+        var timestamp = $"[{DateTime.Now:HH:mm:ss}] ";
+
+        var typePath = GetLogPath(ip, msg);
+        var allPath = GetAllLogPath(ip);
 
         await _logLock.WaitAsync();
         try
         {
-            await File.AppendAllTextAsync(
-            pathLogShuttle,
-            $"[{DateTime.Now}] {formattedString}\n");
+            var line = $"{timestamp}{formattedString}\n";
+            await File.AppendAllTextAsync(typePath, line);
+            await File.AppendAllTextAsync(allPath, line);
         }
         finally
         {
@@ -732,7 +748,6 @@
 
         await InvokeAsync(() =>
         {
-            // Process types
             if (msg is TelemetryMessage tm) UpdateTelemetry(tm.Data);
             else if (msg is SensorMessage sm) UpdateSensors(sm.Data);
             else if (msg is StatsMessage stm) UpdateStats(stm.Data);
@@ -740,7 +755,7 @@
 
             if (msg is RawLogMessage or AckMessage or ConfigMessage)
             {
-                LogToTerminal($"[{DateTime.Now:HH:mm:ss}] {formattedString}\n");
+                LogToTerminal($"{timestamp}{formattedString}\n");
             }
             StateHasChanged();
         });
@@ -750,6 +765,7 @@
     {
         Shuttle.LastActivity = DateTime.Now;
         Shuttle.ErrorCode = (ShuttleFault)data.ErrorCode;
+        Shuttle.WarningCode = data.WarningCode;
         Shuttle.CurrentStatus = ((ShuttleState)data.ShuttleStatus).ToString();
         Shuttle.Position = data.CurrentPosition;
         Shuttle.CurrentSpeed = data.Speed;
@@ -769,7 +785,7 @@
         Shuttle.ReverseDistance = data.DistanceR;
         Shuttle.ForwardPalletDistance = data.DistancePltF;
         Shuttle.ReversePalletDistance = data.DistancePltR;
-        Shuttle.Angle = data.Angle;
+        Shuttle.Angle = data.Angle * (360.0 / 4096.0);
         Shuttle.Temperature = data.Temperature_dC / 10.0;
 
         // Map Hardware Flags
@@ -791,14 +807,14 @@
     private void UpdateStats(StatsPacket data)
     {
         Shuttle.LastActivity = DateTime.Now;
-        Shuttle.TotalDist = data.TotalDist;
+        Shuttle.TotalDist = data.TotalDist / 1000;
         Shuttle.LoadCounter = data.LoadCounter;
         Shuttle.UnloadCounter = data.UnloadCounter;
         Shuttle.CompactCounter = data.CompactCounter;
         Shuttle.LiftUpCounter = data.LiftUpCounter;
         Shuttle.LiftDownCounter = data.LiftDownCounter;
         Shuttle.LifetimePalletsDetected = data.LifetimePalletsDetected;
-        Shuttle.TotalUptimeMinutes = data.TotalUptimeMinutes;
+        Shuttle.TotalUptimeMinutes = data.TotalUptimeMinutes / 60;
         Shuttle.MotorStallCount = data.MotorStallCount;
         Shuttle.LifterOverloadCount = data.LifterOverloadCount;
         Shuttle.CrashCount = data.CrashCount;
@@ -894,7 +910,7 @@
     private async Task SendLargeLoadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_LOAD, 0, 0, "Длительная загрузка");
     private async Task SendUnloadCommand() => await SendBinaryCmd(CmdType.CMD_UNLOAD, 0, 0, "Выгрузка");
     private async Task SendLargeUnloadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_UNLOAD, 0, 0, "Длительная выгрузка");
-    // private async Task SendManualShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MANUAL_MODE, 0, 0, "Ручной режим");
+    private async Task SendManualShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MANUAL_MODE, 0, 0, "Ручной режим");
     private async Task SendDemoCommand() => await SendBinaryCmd(CmdType.CMD_DEMO, 0, 0, "Демо-режим");
     private async Task SendResetCommand() => await SendBinaryCmd(CmdType.CMD_RESET_ERROR, 0, 0, "Сброс ошибок");
     private async Task SendSaveSettingCommand() => await SendBinaryCmd(CmdType.CMD_SAVE_EEPROM, 0, 0, "Сохранение настроек");
@@ -904,8 +920,8 @@
     private async Task SendSealingForwardShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_F, 0, 0, "Уплотнение вперед");
     private async Task SendSealingBackShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_R, 0, 0, "Уплотнение назад");
     private async Task SendUpShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_UP, 0, 0, "Подъём");
-    // private async Task SendLeftShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_LEFT_MAN, 0, 0, "движение назад");
-    // private async Task SendRightShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_RIGHT_MAN, 0, 0, "движение вперёд");
+    private async Task SendLeftShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_LEFT_MAN, 0, 0, "движение назад");
+    private async Task SendRightShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_RIGHT_MAN, 0, 0, "движение вперёд");
     private async Task SendDownShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_DOWN, 0, 0, "Спуск");
     private async Task SendRebootShuttleCommand() => await SendBinaryCmd(CmdType.CMD_SYSTEM_RESET, 0, 0, "Reboot shuttle");
     private async Task SendSetMoveReverseShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_DIST_R, MoveDistanceBackwardInput, 0, $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм");
@@ -1002,7 +1018,7 @@
         }
         else
         {
-            HubClientService.DisconnectFromShuttle(Shuttle.IPAddress);
+            await HubClientService.DisconnectFromShuttleAsync(Shuttle.IPAddress);
             LogToTerminal("[INFO] Запрошено отключение\n");
             await OnDisconnected.InvokeAsync(Shuttle.IPAddress);
         }
@@ -1083,15 +1099,22 @@
         _selectedFile = file?.FilePath;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         Logger.LogInformation("Дисконнект компонента для IP: {IpAddress}", Shuttle.IPAddress);
 
         _componentCts.Cancel();
         _componentCts.Dispose();
 
-        //_otaCts.Cancel();
-        //_otaCts.Dispose();
+        if (_otaCts == null)
+        {
+
+        }
+        else
+        {
+            _otaCts.Cancel();
+            _otaCts.Dispose();
+        }
 
         HubClientService.Connected -= OnHubConnected;
         HubClientService.Disconnected -= OnHubDisconnected;
@@ -1101,10 +1124,21 @@
     private async Task OpenLogsShuttle()
     {
         if (isAndroid)
-        {
             return;
-        }
-        string way = Path.Combine(AppContext.BaseDirectory, "logs");
-        Process.Start("explorer.exe", way);
+
+        string path = Path.Combine(
+            AppContext.BaseDirectory,
+            "logs",
+            Shuttle.IPAddress!);
+
+        if (!Directory.Exists(path))
+            Directory.CreateDirectory(path);
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer",
+            Arguments = path,
+            UseShellExecute = true
+        });
     }
 }

@@ -90,23 +90,6 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             }
         }
 
-        public ConnectedShuttleInfo? GetShuttleInfo(string ipAddress)
-        {
-            lock (_lock)
-            {
-                if (_connections.TryGetValue(ipAddress, out var conn))
-                {
-                    return new ConnectedShuttleInfo
-                    {
-                        IpAddress = conn.IpAddress,
-                        IsConnected = conn.TcpClient?.Connected == true,
-                        ShuttleId = conn.ShuttleId
-                    };
-                }
-            }
-            return null;
-        }
-
         public async Task ConnectToShuttleAsync(string ipAddress, int port)
         {
             lock (_lock) { } // Keeping existing lock pattern
@@ -230,7 +213,7 @@ namespace ShuttleManager.Shared.Services.ShuttleClient
             return false;
         }
 
-        public void DisconnectFromShuttle(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
+        public async Task DisconnectFromShuttleAsync(string ipAddress) => _ = InternalDisconnectAsync(ipAddress);
 
         private async Task ReceiveLoopAsync(ShuttleConnection connection, CancellationToken cancellationToken)
         {
