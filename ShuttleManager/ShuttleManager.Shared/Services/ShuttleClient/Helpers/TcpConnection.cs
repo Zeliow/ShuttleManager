@@ -26,7 +26,20 @@ public class TcpConnection : IDisposable
 
     public void Dispose()
     {
-        try { _stream.Dispose(); } catch { }
-        try { _client.Close(); } catch { }
+        try
+        {
+            _stream.Dispose();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            _client.Close();
+        }
+        catch
+        {
+        }
     }
 }

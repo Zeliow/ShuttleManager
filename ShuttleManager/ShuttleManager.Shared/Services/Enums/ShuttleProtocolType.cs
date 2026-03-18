@@ -1,4 +1,4 @@
-namespace ShuttleManager.Shared.Services.Enums
+﻿namespace ShuttleManager.Shared.Services.Enums
 {
     public enum ShuttleProtocolType
     {
@@ -15,6 +15,6 @@ namespace ShuttleManager.Shared.Services.Enums
         /// <summary>
         /// New Realization binaty protocol
         /// </summary>
-        Binary
+        Binary,
     }
 }

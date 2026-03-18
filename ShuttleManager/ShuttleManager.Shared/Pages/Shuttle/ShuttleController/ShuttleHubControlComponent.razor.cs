@@ -1,13 +1,13 @@
-﻿using Microsoft.AspNetCore.Components;
+﻿using System.Diagnostics;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using ShuttleManager.Shared.Interfaces;
-using ShuttleManager.Shared.Models;
+using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.OtaUpdate;
-using System.Diagnostics;
 
 namespace ShuttleManager.Shared.Pages.Shuttle.ShuttleController;
 
@@ -37,23 +37,25 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     [Parameter]
     public EventCallback<string> OnDisconnected { get; set; }
 
-    private int ShuttleNumberInput = 1;
-    private int MoveDistanceBackwardInput = 0;
-    private int MoveDistanceForwardInput = 0;
-    private int DistanceOfEdge = 0;
-    private int LenghtOfShuttle = 800;
-    private int MaxSpeedInput = 0;
-    private int MinPowerInput = 0;
-    private int PallentDistance = 0;
+    private readonly SemaphoreSlim _logLock = new(1, 1);
+
+    private int _shuttleNumberInput = 1;
+    private int _moveDistanceBackwardInput = 0;
+    private int _moveDistanceForwardInput = 0;
+    private int _distanceOfEdge = 0;
+    private int _lenghtOfShuttle = 800;
+    private int _maxSpeedInput = 0;
+    private int _minPowerInput = 0;
+    private int _pallentDistance = 0;
     private bool IsAndroid => OperatingSystem.IsAndroid();
 
-    private string _terminalOutputHtml = "";
-    private string _manualCommand = "";
+    private string _terminalOutputHtml = string.Empty;
+    private string _manualCommand = string.Empty;
     private string _componentId = Guid.NewGuid().ToString();
     private bool _isCommandInProgress;
     private int _connectionAttempts = 0;
     private CancellationTokenSource _componentCts = new();
-    private bool IsFullErased = false;
+    private bool _isFullErased = false;
 
     private string CurrentStatus => Shuttle.CurrentStatus;
     private int BatteryPercentageValue => Shuttle.BatteryPercentage;
@@ -68,7 +70,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private string? _selectedFile;
     private int _otaPercent;
     private bool _isOtaRunning;
-    private string _otaStatus = "";
+    private string _otaStatus = string.Empty;
     private CancellationTokenSource? _otaCts;
 
     private int _displayPercent;
@@ -78,9 +80,26 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private bool _showSensorsView = false;
     private bool _statsView = false;
 
-    private readonly SemaphoreSlim _logLock = new(1, 1);
-
     private bool isReversed = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Directory.CreateDirectory(
+            Path.Combine(AppContext.BaseDirectory, "logs"));
+            HubClientService.Connected += OnHubConnected;
+            HubClientService.Disconnected += OnHubDisconnected;
+            HubClientService.LogReceived += OnLogReceived;
+            Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка инициализации компонента для {IpAddress}", Shuttle.IPAddress);
+            LogToTerminal($"[ERROR] Ошибка инициализации: {ex.Message}\n");
+        }
+    }
 
     private void UpdatePhaseText(int percent)
     {
@@ -109,7 +128,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private async Task OnAraseModeChanged()
     {
-        IsFullErased = !IsFullErased;
+        _isFullErased = !_isFullErased;
     }
 
     private void SensorView()
@@ -134,25 +153,9 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         {
             return "Статистика";
         }
-        else return "Терминал";
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
-        try
+        else
         {
-            Directory.CreateDirectory(
-            Path.Combine(AppContext.BaseDirectory, "logs"));
-            HubClientService.Connected += OnHubConnected;
-            HubClientService.Disconnected += OnHubDisconnected;
-            HubClientService.LogReceived += OnLogReceived;
-            Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Ошибка инициализации компонента для {IpAddress}", Shuttle.IPAddress);
-            LogToTerminal($"[ERROR] Ошибка инициализации: {ex.Message}\n");
+            return "Терминал";
         }
     }
 
@@ -186,8 +189,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
                 target,
                 progress,
                 _otaCts.Token,
-                IsFullErased
-            );
+                _isFullErased);
 
             if (result.IsSuccess)
             {
@@ -234,7 +236,8 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private async void OnHubConnected(string ip, string id)
     {
-        if (!IsEventForThisShuttle(ip)) return;
+        if (!IsEventForThisShuttle(ip))
+            return;
 
         await InvokeAsync(() =>
         {
@@ -248,7 +251,8 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private async void OnHubDisconnected(string ip)
     {
-        if (!IsEventForThisShuttle(ip)) return;
+        if (!IsEventForThisShuttle(ip))
+            return;
 
         await InvokeAsync(() =>
         {
@@ -304,7 +308,8 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private async Task ProcessLogAsync(string ip, ShuttleMessageBase msg)
     {
-        if (!IsEventForThisShuttle(ip)) return;
+        if (!IsEventForThisShuttle(ip))
+            return;
 
         var formattedString = msg.ToFormattedTerminalString();
         var timestamp = $"[{DateTime.Now:HH:mm:ss}] ";
@@ -326,15 +331,20 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
         await InvokeAsync(() =>
         {
-            if (msg is TelemetryMessage tm) UpdateTelemetry(tm.Data);
-            else if (msg is SensorMessage sm) UpdateSensors(sm.Data);
-            else if (msg is StatsMessage stm) UpdateStats(stm.Data);
-            else if (msg is ConfigMessage cm) UpdateConfig(cm.Data);
+            if (msg is TelemetryMessage tm)
+                UpdateTelemetry(tm.Data);
+            else if (msg is SensorMessage sm)
+                UpdateSensors(sm.Data);
+            else if (msg is StatsMessage stm)
+                UpdateStats(stm.Data);
+            else if (msg is ConfigMessage cm)
+                UpdateConfig(cm.Data);
 
             if (msg is RawLogMessage or AckMessage or ConfigMessage)
             {
                 LogToTerminal($"{timestamp}{formattedString}\n");
             }
+
             StateHasChanged();
         });
     }
@@ -462,7 +472,9 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
             await HubClientService.SendCommandAsync(
                 Shuttle.IPAddress,
-                cmd, arg1, arg2);
+                cmd,
+                arg1,
+                arg2);
         }
         finally
         {
@@ -556,14 +568,13 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     // config button with param
     private async Task SendSetMoveReverseShuttleCommand()
         => await SendCommand(
-            ShuttleCommand.MoveDistanceBackward, $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм", MoveDistanceBackwardInput);
+            ShuttleCommand.MoveDistanceBackward, $"Проезд расстояния назад: {_moveDistanceBackwardInput} мм", _moveDistanceBackwardInput);
 
     private async Task SendMoveForwardShuttleCommand()
         => await SendCommand(
-            ShuttleCommand.MoveDistanceForward, $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм", MoveDistanceForwardInput);
+            ShuttleCommand.MoveDistanceForward, $"Проезд расстояния вперёд: {_moveDistanceForwardInput} мм", _moveDistanceForwardInput);
 
     // === Конфигурационные команды ===
-
     private async Task SendUseReverseModeShuttleCommand()
     {
         if (!isReversed)
@@ -580,33 +591,27 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private async Task SendSetMaxSpeedShuttleCommand()
         => await SendConfigCommand(
-            ShuttleConfigCommand.MaxSpeed, MaxSpeedInput,
-            $"Установка максимальной скорости: {MaxSpeedInput}%");
+            ShuttleConfigCommand.MaxSpeed, _maxSpeedInput, $"Установка максимальной скорости: {_maxSpeedInput}%");
 
     private async Task SendSetMinPowerShuttleCommand()
         => await SendConfigCommand(
-            ShuttleConfigCommand.MinBattery, MinPowerInput,
-            $"Установка уровня защиты батареи: {MinPowerInput}%");
+            ShuttleConfigCommand.MinBattery, _minPowerInput, $"Установка уровня защиты батареи: {_minPowerInput}%");
 
     private async Task SendSetPalletBetweenDistanceShuttleCommand()
         => await SendConfigCommand(
-            ShuttleConfigCommand.InterPalletDistance, PallentDistance,
-            $"Установка межпаллетного расстояния: {PallentDistance}%");
+            ShuttleConfigCommand.InterPalletDistance, _pallentDistance, $"Установка межпаллетного расстояния: {_pallentDistance}%");
 
     private async Task SendSetDistanceOfEdgeShuttleCommand()
         => await SendConfigCommand(
-            ShuttleConfigCommand.DistOfEdge, DistanceOfEdge,
-            $"Установка расстояния от края: {DistanceOfEdge} мм");
+            ShuttleConfigCommand.DistOfEdge, _distanceOfEdge, $"Установка расстояния от края: {_distanceOfEdge} мм");
 
     private async Task SendSetlenghtOfShuttleCommand()
         => await SendConfigCommand(
-            ShuttleConfigCommand.ShuttleLength, LenghtOfShuttle,
-            $"Установка длины шаттла: {LenghtOfShuttle} мм");
+            ShuttleConfigCommand.ShuttleLength, _lenghtOfShuttle, $"Установка длины шаттла: {_lenghtOfShuttle} мм");
 
     private async Task SendSetShuttleNumCommand()
         => await SendConfigCommand(
-            ShuttleConfigCommand.ShuttleNumber, ShuttleNumberInput,
-            $"Установка номера шаттла: {ShuttleNumberInput}");
+            ShuttleConfigCommand.ShuttleNumber, _shuttleNumberInput, $"Установка номера шаттла: {_shuttleNumberInput}");
 
     private async Task SetTime()
     {
@@ -665,7 +670,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             await HubClientService.SendManualCommandAsync(Shuttle.IPAddress!, cmd);
         }
 
-        _manualCommand = "";
+        _manualCommand = string.Empty;
     }
 
     private async Task HandleKeyPress(KeyboardEventArgs e)
@@ -730,7 +735,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private void ClearTerminal()
     {
         Shuttle.ClearTerminalMessage();
-        _terminalOutputHtml = "";
+        _terminalOutputHtml = string.Empty;
         StateHasChanged();
     }
 
@@ -745,7 +750,8 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             Shuttle.RemoveTerminalMessage();
         }
 
-        _terminalOutputHtml = string.Join("",
+        _terminalOutputHtml = string.Join(
+            string.Empty,
             Shuttle.GetTerminalMessages().Select(line =>
                 $"<div class=\"terminal-line\">{System.Net.WebUtility.HtmlEncode(line)}</div>"));
         StateHasChanged();
@@ -832,7 +838,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         {
             FileName = "explorer",
             Arguments = path,
-            UseShellExecute = true
+            UseShellExecute = true,
         });
     }
 }

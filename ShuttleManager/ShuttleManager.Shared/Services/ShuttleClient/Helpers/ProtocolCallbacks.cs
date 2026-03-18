@@ -1,9 +1,9 @@
-﻿using ShuttleManager.Shared.Models;
+﻿using ShuttleManager.Shared.Models.Messages;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 
 public class ProtocolCallbacks
 {
-    /// <summary>Вызывается при получении сообщения от шаттла.</summary>
+    /// <summary>Gets вызывается при получении сообщения от шаттла.</summary>
     public required Action<string, ShuttleMessageBase>? OnMessage { get; init; }
 }

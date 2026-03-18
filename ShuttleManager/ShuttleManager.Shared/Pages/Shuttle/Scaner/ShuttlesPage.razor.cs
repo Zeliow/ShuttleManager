@@ -1,8 +1,8 @@
-﻿using Microsoft.AspNetCore.Components;
+﻿using System.Diagnostics;
+using System.Net;
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using ShuttleManager.Shared.Interfaces;
-using System.Diagnostics;
-using System.Net;
 
 namespace ShuttleManager.Shared.Pages.Shuttle.Scaner;
 
@@ -14,15 +14,15 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
     [Inject]
     protected IShuttleHubClientService HubClientService { get; set; } = default!;
 
-    protected string BaseIp = "192.168.40";
-    protected int Port = 23;
-    protected int StartRange = 130;
-    protected int EndRange = 250;
-    protected bool IsScanning = false;
-    protected bool ScanCompleted = false;
-    protected List<IPAddress> FoundDevices = new();
+    protected string baseIp = "192.168.40";
+    protected int port = 23;
+    protected int startRange = 130;
+    protected int endRange = 250;
+    protected bool isScanning = false;
+    protected bool scanCompleted = false;
+    protected List<IPAddress> foundDevices = new();
     protected List<Models.Shuttle> _connectedShuttles = new();
-    protected int ActiveTabIndex = -1;
+    protected int activeTabIndex = -1;
     protected Timer? _cleanupTimer;
 
     protected string[] shuttleNums = { "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32" };
@@ -39,7 +39,8 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
         HubClientService.Disconnected += OnShuttleDisconnected;
         await RefreshConnectedShuttles();
 
-        _cleanupTimer = new Timer(async _ => await CleanupDisconnectedShuttles(),
+        _cleanupTimer = new Timer(
+            async _ => await CleanupDisconnectedShuttles(),
             null,
             TimeSpan.FromSeconds(5),
             TimeSpan.FromSeconds(5));
@@ -61,10 +62,10 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
                 foreach (var shuttle in shuttlesToRemove)
                     _connectedShuttles.Remove(shuttle);
 
-                if (ActiveTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
-                    ActiveTabIndex = _connectedShuttles.Count - 1;
+                if (activeTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
+                    activeTabIndex = _connectedShuttles.Count - 1;
                 else if (!_connectedShuttles.Any())
-                    ActiveTabIndex = -1;
+                    activeTabIndex = -1;
 
                 StateHasChanged();
             }
@@ -73,7 +74,7 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
 
     protected async Task HandleConnectClickIfNotConnected(string ipAddress)
     {
-        await HubClientService.ConnectToShuttleAsync(ipAddress, Port);
+        await HubClientService.ConnectToShuttleAsync(ipAddress, port);
         StateHasChanged();
     }
 
@@ -82,25 +83,26 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
         var connectedShuttles = HubClientService.GetConnectedShuttles();
         _connectedShuttles = connectedShuttles.ToList();
 
-        if (_connectedShuttles.Any() && ActiveTabIndex == -1)
-            ActiveTabIndex = 0;
+        if (_connectedShuttles.Any() && activeTabIndex == -1)
+            activeTabIndex = 0;
 
         StateHasChanged();
     }
 
     protected async Task StartScan()
     {
-        if (IsScanning) return;
+        if (isScanning)
+            return;
 
-        IsScanning = true;
-        ScanCompleted = false;
-        FoundDevices.Clear();
+        isScanning = true;
+        scanCompleted = false;
+        foundDevices.Clear();
 
         StateHasChanged();
 
         try
         {
-            FoundDevices = await HubClientService.ScanNetworkAsync(BaseIp, StartRange, EndRange, Port, 1000);
+            foundDevices = await HubClientService.ScanNetworkAsync(baseIp, startRange, endRange, port, 1000);
         }
         catch (Exception ex)
         {
@@ -109,8 +111,8 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
         }
         finally
         {
-            IsScanning = false;
-            ScanCompleted = true;
+            isScanning = false;
+            scanCompleted = true;
             StateHasChanged();
         }
     }
@@ -122,7 +124,7 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
             string correctNum;
             try
             {
-                correctNum = shuttleNums[(int.Parse(ipAddress[^3..]) - 131)];
+                correctNum = shuttleNums[int.Parse(ipAddress[^3..]) - 131];
             }
             catch
             {
@@ -141,7 +143,7 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
                 };
 
                 _connectedShuttles.Add(newShuttle);
-                ActiveTabIndex = _connectedShuttles.Count - 1;
+                activeTabIndex = _connectedShuttles.Count - 1;
 
                 StateHasChanged();
             }
@@ -158,10 +160,10 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
             {
                 _connectedShuttles.RemoveAt(index);
 
-                if (ActiveTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
-                    ActiveTabIndex = _connectedShuttles.Count - 1;
+                if (activeTabIndex >= _connectedShuttles.Count && _connectedShuttles.Any())
+                    activeTabIndex = _connectedShuttles.Count - 1;
                 else if (!_connectedShuttles.Any())
-                    ActiveTabIndex = -1;
+                    activeTabIndex = -1;
 
                 StateHasChanged();
             }
@@ -171,7 +173,7 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
     protected void SelectShuttle(int tabIndex)
     {
         if (tabIndex >= 0 && tabIndex < _connectedShuttles.Count)
-            ActiveTabIndex = tabIndex;
+            activeTabIndex = tabIndex;
     }
 
     protected bool IsAlreadyConnected(string ipAddress)
@@ -197,12 +199,14 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
 
     protected async Task ApplyThemeAsync(bool isDark)
     {
-        var themeValue = isDark ? "dark" : "";
+        var themeValue = isDark ? "dark" : string.Empty;
 
-        await JSRuntime.InvokeVoidAsync("eval",
+        await JSRuntime.InvokeVoidAsync(
+            "eval",
             $"document.documentElement.setAttribute('data-theme', '{themeValue}');");
 
-        await JSRuntime.InvokeVoidAsync("eval",
+        await JSRuntime.InvokeVoidAsync(
+            "eval",
             $"localStorage.setItem('user-theme-preference', '{(isDark ? "dark" : "light")}');");
     }
 

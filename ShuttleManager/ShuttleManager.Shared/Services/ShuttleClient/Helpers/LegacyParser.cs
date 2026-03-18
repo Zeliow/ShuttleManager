@@ -1,7 +1,8 @@
-﻿using ShuttleManager.Shared.Models;
-using ShuttleManager.Shared.Models.Protocol;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.RegularExpressions;
+using ShuttleManager.Shared.Models;
+using ShuttleManager.Shared.Models.Messages;
+using ShuttleManager.Shared.Models.Protocol;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 
@@ -18,7 +19,8 @@ public static class LegacyParser
     public static List<ShuttleMessageBase> Parse(string line)
     {
         var messages = new List<ShuttleMessageBase>();
-        if (string.IsNullOrWhiteSpace(line)) return messages;
+        if (string.IsNullOrWhiteSpace(line))
+            return messages;
 
         ParseTelemetry(line, messages);
         ParseSensors(line, messages);
@@ -26,8 +28,6 @@ public static class LegacyParser
 
         return messages;
     }
-
-    #region Telemetry Parsing
 
     private static void ParseTelemetry(string line, List<ShuttleMessageBase> messages)
     {
@@ -70,11 +70,15 @@ public static class LegacyParser
             // Inverse / FIFO_LIFO
             if (line.Contains("Inverse") || line.Contains("FIFO_LIFO"))
             {
-                if (line.Contains("Inverse = YES")) _telemetry.StateFlags |= 8;
-                else _telemetry.StateFlags &= 0xFF - 8;
+                if (line.Contains("Inverse = YES"))
+                    _telemetry.StateFlags |= 8;
+                else
+                    _telemetry.StateFlags &= 0xFF - 8;
 
-                if (line.Contains("FIFO_LIFO = LIFO")) _telemetry.StateFlags |= 4;
-                else _telemetry.StateFlags &= 0xFF - 4;
+                if (line.Contains("FIFO_LIFO = LIFO"))
+                    _telemetry.StateFlags |= 4;
+                else
+                    _telemetry.StateFlags &= 0xFF - 4;
 
                 messages.Add(new TelemetryMessage { Data = _telemetry });
             }
@@ -82,8 +86,10 @@ public static class LegacyParser
             // In channel
             if (line.Contains("In channel"))
             {
-                if (line.Contains("YES")) _telemetry.StateFlags |= 16;
-                else _telemetry.StateFlags &= 0xFF - 16;
+                if (line.Contains("YES"))
+                    _telemetry.StateFlags |= 16;
+                else
+                    _telemetry.StateFlags &= 0xFF - 16;
 
                 messages.Add(new TelemetryMessage { Data = _telemetry });
             }
@@ -91,11 +97,15 @@ public static class LegacyParser
             // Lifter
             if (line.Contains("Lifter"))
             {
-                if (line.Contains("UP: YES")) _telemetry.StateFlags |= 1;
-                else _telemetry.StateFlags &= 0xFF - 1;
+                if (line.Contains("UP: YES"))
+                    _telemetry.StateFlags |= 1;
+                else
+                    _telemetry.StateFlags &= 0xFF - 1;
 
-                if (line.Contains("DOWN: YES")) _telemetry.StateFlags |= 2;
-                else _telemetry.StateFlags &= 0xFF - 2;
+                if (line.Contains("DOWN: YES"))
+                    _telemetry.StateFlags |= 2;
+                else
+                    _telemetry.StateFlags &= 0xFF - 2;
 
                 messages.Add(new TelemetryMessage { Data = _telemetry });
             }
@@ -123,12 +133,11 @@ public static class LegacyParser
                 }
             }
         }
-        catch { /* Игнорируем некорректные строки */ }
+        catch
+        {
+            /* Игнорируем некорректные строки */
+        }
     }
-
-    #endregion Telemetry Parsing
-
-    #region Sensor Parsing
 
     private static void ParseSensors(string line, List<ShuttleMessageBase> messages)
     {
@@ -205,12 +214,11 @@ public static class LegacyParser
                 }
             }
         }
-        catch { /* Игнорируем */ }
+        catch
+        {
+            /* Игнорируем */
+        }
     }
-
-    #endregion Sensor Parsing
-
-    #region Stats Parsing
 
     private static void ParseStats(string line, List<ShuttleMessageBase> messages)
     {
@@ -236,8 +244,9 @@ public static class LegacyParser
                 }
             }
         }
-        catch { /* Игнорируем */ }
+        catch
+        {
+            /* Игнорируем */
+        }
     }
-
-    #endregion Stats Parsing
 }

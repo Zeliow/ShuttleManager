@@ -13,32 +13,32 @@
                     <div class="row mb-1">
                         <div class="col-md-12">
                             <label for="baseIp" class="form-label">Базовый IP:</label>
-                            <InputText id="baseIp" @bind-Value="BaseIp" class="form-control" placeholder="192.168.40" />
+                            <InputText id="baseIp" @bind-Value="baseIp" class="form-control" placeholder="192.168.40" />
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label for="port" class="form-label">Порт:</label>
-                            <InputNumber id="port" @bind-Value="Port" class="form-control" min="1" max="65535" />
+                            <InputNumber id="port" @bind-Value="port" class="form-control" min="1" max="65535" />
                         </div>
                     </div>
-                    <button @onclick="StartScan" class="btn btn-primary w-100 mb-3" disabled="@IsScanning">
-                        @(IsScanning ? "Сканирование..." : "Найти устройства")
+                    <button @onclick="StartScan" class="btn btn-primary w-100 mb-3" disabled="@isScanning">
+                        @(isScanning ? "Сканирование..." : "Найти устройства")
                     </button>
 
-                    @if (IsScanning)
+                    @if (isScanning)
                     {
                         <div class="alert alert-info">
                             <div class="spinner-border spinner-border-sm" role="status"></div>
-                            Поиск на @(BaseIp).@(StartRange)-@(EndRange):@(Port)...
+                            Поиск на @(baseIp).@(startRange)-@(endRange):@(port)...
                         </div>
                     }
-                    @if (FoundDevices.Any())
+                    @if (foundDevices.Any())
                     {
                         <div>
                             <h6>Найденные устройства:</h6>
                             <div class="d-grid gap-2">
-                                @foreach (var ip in FoundDevices)
+                                @foreach (var ip in foundDevices)
                                 {
                                     <button class="btn @(IsAlreadyConnected(ip.ToString()) ? "btn-success" : "btn-outline-primary")"
                                             @onclick="() => HandleConnectClickIfNotConnected(ip.ToString())"
@@ -49,7 +49,7 @@
                             </div>
                         </div>
                     }
-                    else if (ScanCompleted && !IsScanning && !FoundDevices.Any())
+                    else if (scanCompleted && !isScanning && !foundDevices.Any())
                     {
                         <div class="alert alert-secondary">
                             Устройства не найдены.
@@ -67,7 +67,7 @@
                     @foreach (var (shuttle, index) in _connectedShuttles.Select((s, i) => (s, i)))
                     {
                         <li class="nav-item">
-                            <a class="nav-link @(index == ActiveTabIndex ? "active" : "")"
+                            <a class="nav-link @(index == activeTabIndex ? "active" : "")"
                                href="#" @onclick="() => SelectShuttle(index)">
                                 Шаттл №@shuttle.ShuttleNumber
                                 @if (shuttle.IsConnected)
@@ -83,9 +83,9 @@
                     }
                 </ul>
 
-                @if (ActiveTabIndex >= 0 && ActiveTabIndex < _connectedShuttles.Count)
+                @if (activeTabIndex >= 0 && activeTabIndex < _connectedShuttles.Count)
                 {
-                    var activeShuttle = _connectedShuttles[ActiveTabIndex];
+                    var activeShuttle = _connectedShuttles[activeTabIndex];
                     <div class="tab-content">
                         <div class="tab-pane active">
                             <ShuttleHubControlComponent @key="activeShuttle.IPAddress" Shuttle="activeShuttle"

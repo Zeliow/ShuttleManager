@@ -1,12 +1,12 @@
-﻿using ShuttleManager.Shared.Interfaces;
-using ShuttleManager.Shared.Models;
+﻿using System.Diagnostics;
+using System.Text;
+using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.Command;
 using ShuttleManager.Shared.Services.ShuttleClient.Config;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
-using System.Diagnostics;
-using System.Text;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.LegacyService;
 
@@ -30,7 +30,8 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         while (true)
         {
             int newline = Array.IndexOf(data, (byte)'\n', start);
-            if (newline < 0) break;
+            if (newline < 0)
+                break;
 
             int length = newline - start;
             var line = Encoding.UTF8.GetString(data, start, length).Trim();
@@ -48,7 +49,8 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
 
     private void HandleLegacyLine(ShuttleConnection connection, string line)
     {
-        if (string.IsNullOrWhiteSpace(line)) return;
+        if (string.IsNullOrWhiteSpace(line))
+            return;
 
         // Парсим строку в один или несколько сообщений
         var messages = LegacyParser.Parse(line);
@@ -57,7 +59,7 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         var raw = new RawLogMessage
         {
             Level = LogLevel.LOG_INFO,
-            Text = line
+            Text = line,
         };
         messages.Add(raw);
 
@@ -69,7 +71,8 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
 
     private async Task<bool> SendPacketAsync(ShuttleConnection connection, string text, CancellationToken cancellationToken)
     {
-        if (!text.EndsWith("\n")) text += "\n";
+        if (!text.EndsWith("\n"))
+            text += "\n";
         var data = Encoding.UTF8.GetBytes(text);
         Debug.WriteLine($"command text: {text}");
         Debug.WriteLine($"command data: {data}");
@@ -81,7 +84,8 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
 
     public async Task<bool> SendCommandAsync(ShuttleConnection connection, ShuttleCommand cmd, int arg1, int arg2, CancellationToken ct, int timeoutMs = 1000)
     {
-        if (connection.Transport == null) return false;
+        if (connection.Transport == null)
+            return false;
 
         var text = LegacyCommandMapper.Map(connection.ShuttleId, cmd, arg1);
 
@@ -111,7 +115,8 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         CancellationToken ct,
         int timeoutMs = 1000)
     {
-        if (connection.Transport == null) return false;
+        if (connection.Transport == null)
+            return false;
 
         return await SendPacketAsync(connection, rawCommand, ct);
     }

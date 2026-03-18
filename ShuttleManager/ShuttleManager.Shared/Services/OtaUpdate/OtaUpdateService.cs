@@ -1,8 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
-using ShuttleManager.Shared.Interfaces;
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
+using ShuttleManager.Shared.Interfaces;
 
 namespace ShuttleManager.Shared.Services.OtaUpdate;
 
@@ -311,7 +311,7 @@ public enum OtaPhase
     /// <summary>
     /// Finale
     /// </summary>
-    Finalizing
+    Finalizing,
 }
 
 public sealed record OtaProgress(long Sent, long Total)

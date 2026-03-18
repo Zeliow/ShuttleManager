@@ -1,30 +1,31 @@
-﻿using ShuttleManager.Shared.Interfaces;
-using ShuttleManager.Shared.Models;
-using ShuttleManager.Shared.Models.Protocol;
-using ShuttleManager.Shared.Services.Enums;
-using ShuttleManager.Shared.Services.ShuttleClient.Command;
-using ShuttleManager.Shared.Services.ShuttleClient.Config;
-using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
+using ShuttleManager.Shared.Interfaces;
+using ShuttleManager.Shared.Models;
+using ShuttleManager.Shared.Models.Messages;
+using ShuttleManager.Shared.Models.Protocol;
+using ShuttleManager.Shared.Services.Enums;
+using ShuttleManager.Shared.Services.ShuttleClient.Command;
+using ShuttleManager.Shared.Services.ShuttleClient.Config;
+using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.BinaryService;
 
 public class BinaryProtocolHandler : IShuttleProtocolHandler
 {
+    private const byte PROTOCOL_SYNC_1_V2 = 0xBB;
+    private const byte PROTOCOL_SYNC_2_V2 = 0xCC;
+    private const int MAX_PAYLOAD_SIZE = 64;
+
     private readonly ProtocolCallbacks _callbacks;
     private readonly ConcurrentDictionary<byte, TaskCompletionSource<bool>> _ackWaiters;
     private readonly object _lock;
 
     public ShuttleProtocolType Protocol => ShuttleProtocolType.Binary;
-
-    private const byte PROTOCOL_SYNC_1_V2 = 0xBB;
-    private const byte PROTOCOL_SYNC_2_V2 = 0xCC;
-    private const int MAX_PAYLOAD_SIZE = 64;
 
     public BinaryProtocolHandler(
         ProtocolCallbacks callbacks,
@@ -55,7 +56,8 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
                 }
             }
 
-            if (syncIndex == -1) break;
+            if (syncIndex == -1)
+                break;
 
             if (data.Length - syncIndex < 6)
             {
@@ -157,6 +159,7 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
                     crc <<= 1;
             }
         }
+
         return crc;
     }
 
@@ -233,7 +236,7 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         var packet = new ConfigPacket
         {
             ParamID = (byte)param,
-            Value = value
+            Value = value,
         };
 
         return SendPacketAsync(connection, MsgID.MSG_CONFIG_SET, packet, timeoutMs);
@@ -278,7 +281,7 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
             Day = (byte)utcTime.Day,
             Hour = (byte)utcTime.Hour,
             Minute = (byte)utcTime.Minute,
-            Second = (byte)utcTime.Second
+            Second = (byte)utcTime.Second,
         };
 
         return SendPacketAsync(connection, MsgID.MSG_SET_DATETIME, packet, timeoutMs);
@@ -292,6 +295,7 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
             var packet = new SimpleCmdPacket { CmdType = (byte)result };
             return SendPacketAsync(connection, MsgID.MSG_CMD_SIMPLE, packet, timeoutMs);
         }
+
         return Task.FromResult(false);
     }
 }

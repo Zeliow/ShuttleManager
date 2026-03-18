@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 	<PropertyGroup>
-		<TargetFrameworks>net10.0-android</TargetFrameworks>
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+		<TargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>
 
 		<OutputType>Exe</OutputType>
 		<RootNamespace>ShuttleManager</RootNamespace>
@@ -13,6 +12,7 @@
 
 		<ApplicationTitle>[MICRON] Менеджер шаттлов S.V2</ApplicationTitle>
 		<ApplicationId>shuttlemanager</ApplicationId>
+    <Version>2.0.0</Version>
 		<ApplicationDisplayVersion>2.0</ApplicationDisplayVersion>
 		<ApplicationVersion>2</ApplicationVersion>
 
@@ -62,6 +62,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\ShuttleManager.Shared\ShuttleManager.Shared.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Analyzers" Version="10.0.0" PrivateAssets="all" />
 	</ItemGroup>
 
 	<ItemGroup>

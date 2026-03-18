@@ -1,10 +1,11 @@
-using ShuttleManager.Shared.Models.Protocol;
+﻿using ShuttleManager.Shared.Models.Protocol;
 
 namespace ShuttleManager.Shared.Models;
 
 public class Shuttle
 {
-    public string ShuttleNumber { get; set; } = "";
+    private readonly object _lock = new object();
+    public string ShuttleNumber { get; set; } = string.Empty;
     public string? IPAddress { get; set; } = string.Empty;
     public int BatteryPercentage { get; set; } = 0;
     public bool? Inverse { get; set; }
@@ -63,8 +64,6 @@ public class Shuttle
     public ushort StateFlags { get; set; }
 
     private List<string> _terminalMessages = [];
-
-    private readonly object _lock = new object();
 
     public void AddTerminalMessage(string message)
     {

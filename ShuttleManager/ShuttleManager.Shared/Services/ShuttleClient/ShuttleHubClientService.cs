@@ -1,13 +1,14 @@
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Models;
+using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.BinaryService;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 using ShuttleManager.Shared.Services.ShuttleClient.LegacyService;
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient;
 
@@ -26,6 +27,12 @@ public class ShuttleConnection
 
 public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 {
+    // Protocol V2 constants for frame parsing
+    private const byte PROTOCOL_SYNC_1_V2 = 0xBB;
+
+    private const byte PROTOCOL_SYNC_2_V2 = 0xCC;
+    private const int MAX_PAYLOAD_SIZE = 64; // Maximum reasonable payload size
+
     private readonly ProtocolCallbacks _protocolCallbacks;
     private readonly IShuttleProtocolHandler _binaryHandler;
     private readonly IShuttleProtocolHandler _legacyHandler;
@@ -34,18 +41,12 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     {
         _protocolCallbacks = new ProtocolCallbacks
         {
-            OnMessage = (ip, msg) => OnLogReceived(ip, msg)
+            OnMessage = (ip, msg) => OnLogReceived(ip, msg),
         };
 
         _binaryHandler = new BinaryProtocolHandler(_protocolCallbacks, _ackWaiters, _lock);
         _legacyHandler = new LegacyProtocolHandler(_protocolCallbacks);
     }
-
-    // Protocol V2 constants for frame parsing
-    private const byte PROTOCOL_SYNC_1_V2 = 0xBB;
-
-    private const byte PROTOCOL_SYNC_2_V2 = 0xCC;
-    private const int MAX_PAYLOAD_SIZE = 64; // Maximum reasonable payload size
 
     public event Action<string, ShuttleMessageBase>? LogReceived;
 
@@ -78,15 +79,21 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
                         if (client.Connected)
                         {
                             Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices) foundDevices.Add(IPAddress.Parse(ip));
+                            lock (foundDevices)
+                                foundDevices.Add(IPAddress.Parse(ip));
                         }
                     }
-                    catch (OperationCanceledException) { }
+                    catch (OperationCanceledException)
+                    {
+                    }
                 }
-                catch (SocketException) { }
+                catch (SocketException)
+                {
+                }
             });
             tasks.Add(task);
         }
+
         await Task.WhenAll(tasks);
         return foundDevices;
     }
@@ -104,6 +111,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
                     IsConnected = kvp.Value.Transport?.IsConnected == true,
                 });
             }
+
             return infos;
         }
     }
@@ -111,7 +119,9 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     //механизм подключения к шаттлу
     public async Task ConnectToShuttleAsync(string ipAddress, int port)
     {
-        lock (_lock) { }
+        lock (_lock)
+        {
+        }
 
         var connection = new ShuttleConnection { IpAddress = ipAddress };
 
@@ -128,12 +138,13 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
             connection.Transport = new TcpConnection(tcpClient);
 
-            connection.ShuttleId = shuttleNums[(int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131)];
+            connection.ShuttleId = shuttleNums[int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131];
 
             OnConnected(ipAddress, connection.ShuttleId);
 
             connection.ReceiveCts = new CancellationTokenSource();
-            connection.ReceiveTask = Task.Run(async () =>
+            connection.ReceiveTask = Task.Run(
+                async () =>
                 await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
 
             lock (_lock)
@@ -155,7 +166,8 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         {
             try
             {
-                if (connection.Transport == null) break;
+                if (connection.Transport == null)
+                    break;
 
                 int bytesRead = await connection.Transport.ReadAsync(buffer, cancellationToken);
                 if (bytesRead == 0)
@@ -172,7 +184,10 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
                 connection.Handler?.ProcessBuffer(connection);
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ShuttleHubClientService] Ошибка приёма от {connection.IpAddress}: {ex.Message}");
@@ -180,6 +195,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
                 break;
             }
         }
+
         Debug.WriteLine($"[ShuttleHubClientService] ReceiveLoop завершён для {connection.IpAddress}");
     }
 
@@ -293,8 +309,11 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
                 {
                     await connectionToDispose.ReceiveTask;
                 }
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException)
+                {
+                }
             }
+
             OnDisconnected(ipAddress);
         }
     }
@@ -312,6 +331,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
                 conn.Transport?.Dispose();
                 conn.Transport = null;
             }
+
             _connections.Clear();
         }
     }

@@ -1,7 +1,7 @@
+﻿using System.Net;
 using ShuttleManager.Shared.Models;
-using ShuttleManager.Shared.Models.Protocol;
+using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Services.Enums;
-using System.Net;
 
 namespace ShuttleManager.Shared.Interfaces;
 
