@@ -1,7 +1,11 @@
 ﻿using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
+using ShuttleManager.Shared.Services.ShuttleClient.Command;
+using ShuttleManager.Shared.Services.ShuttleClient.Config;
+using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 using ShuttleManager.Shared.Services.ShuttleClient.Parsing;
+using System.Diagnostics;
 using System.Text;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.LegacyService;
@@ -57,29 +61,58 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         };
         messages.Add(raw);
 
-        // Отправляем через колбэк
         foreach (var msg in messages)
         {
             _callbacks.OnMessage?.Invoke(connection.IpAddress, msg);
         }
     }
 
-    public async Task<bool> SendCommandAsync(ShuttleConnection connection, string command, CancellationToken ct, int timeoutMs = 1000)
+    private async Task<bool> SendPacketAsync(ShuttleConnection connection, string text, CancellationToken cancellationToken)
     {
-        if (connection.Transport == null) return false;
-
-        if (!command.EndsWith("\n")) command += "\n";
-        var data = Encoding.UTF8.GetBytes(command);
-
-        await connection.Transport.WriteAsync(data, ct);
-        await connection.Transport.FlushAsync(ct);
+        if (!text.EndsWith("\n")) text += "\n";
+        var data = Encoding.UTF8.GetBytes(text);
+        Debug.WriteLine($"command text: {text}");
+        Debug.WriteLine($"command data: {data}");
+        await connection.Transport!.WriteAsync(data, cancellationToken);
+        await connection.Transport.FlushAsync(cancellationToken);
 
         return true;
     }
 
-    public Task<bool> SendCommandAsync(ShuttleConnection connection, CmdType cmd, int arg1, int arg2, int timeoutMs = 1000)
+    public async Task<bool> SendCommandAsync(ShuttleConnection connection, ShuttleCommand cmd, int arg1, int arg2, CancellationToken ct, int timeoutMs = 1000)
     {
-        // Legacy не использует бинарные команды
-        throw new NotSupportedException("LegacyProtocolHandler does not support binary commands");
+        if (connection.Transport == null) return false;
+
+        var text = LegacyCommandMapper.Map(connection.ShuttleId, cmd, arg1);
+
+        return await SendPacketAsync(connection, text, ct);
+    }
+
+    public async Task<bool> SendConfigAsync(ShuttleConnection connection, ShuttleConfigCommand param, int value, int timeoutMs = 1000)
+    {
+        if (param == ShuttleConfigCommand.ShuttleNumber)
+            connection.ShuttleId = Convert.ToString(value);
+
+        var text = LegacyConfigMapper.Map(connection.ShuttleId, param, value);
+
+        return await SendPacketAsync(connection, text, CancellationToken.None);
+    }
+
+    public async Task<bool> SendDateTimeAsync(ShuttleConnection connection, DateTime utcTime, int timeoutMs = 1000)
+    {
+        var cmd = $"DT{utcTime:HH:mm:ss dd/MM/yyyy}\n";
+
+        return await SendPacketAsync(connection, cmd, CancellationToken.None);
+    }
+
+    public async Task<bool> SendManualCommandAsync(
+        ShuttleConnection connection,
+        string rawCommand,
+        CancellationToken ct,
+        int timeoutMs = 1000)
+    {
+        if (connection.Transport == null) return false;
+
+        return await SendPacketAsync(connection, rawCommand, ct);
     }
 }

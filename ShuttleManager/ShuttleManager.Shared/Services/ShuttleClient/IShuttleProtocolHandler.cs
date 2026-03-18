@@ -9,9 +9,14 @@ public interface IShuttleProtocolHandler
 
     void ProcessBuffer(ShuttleConnection connection);
 
-    // Для Legacy команд
-    Task<bool> SendCommandAsync(ShuttleConnection connection, string command, CancellationToken ct, int timeoutMs = 1000);
+    Task<bool> SendCommandAsync(ShuttleConnection connection, ShuttleCommand cmd, int arg1, int arg2, CancellationToken ct, int timeoutMs = 1000);
 
-    // Для Binary команд
-    Task<bool> SendCommandAsync(ShuttleConnection connection, CmdType cmd, int arg1, int arg2, int timeoutMs = 1000);
+    // Конфигурация
+    Task<bool> SendConfigAsync(ShuttleConnection connection, ShuttleConfigCommand param, int value, int timeoutMs = 1000);
+
+    // Установка времени
+    Task<bool> SendDateTimeAsync(ShuttleConnection connection, DateTime utcTime, int timeoutMs = 1000);
+
+    //Chats command
+    Task<bool> SendManualCommandAsync(ShuttleConnection connection, string rawCommand, CancellationToken ct, int timeoutMs = 1000);
 }

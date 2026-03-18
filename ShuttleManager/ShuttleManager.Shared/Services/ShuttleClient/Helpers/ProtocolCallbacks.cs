@@ -1,6 +1,6 @@
 ﻿using ShuttleManager.Shared.Models;
 
-namespace ShuttleManager.Shared.Services.ShuttleClient;
+namespace ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 
 public class ProtocolCallbacks
 {

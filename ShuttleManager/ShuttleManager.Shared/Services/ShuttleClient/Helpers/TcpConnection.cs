@@ -1,6 +1,6 @@
 ﻿using System.Net.Sockets;
 
-namespace ShuttleManager.Shared.Services.ShuttleClient;
+namespace ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 
 public class TcpConnection : IDisposable
 {

@@ -11,6 +11,7 @@ public static class LegacyParser
     private static TelemetryPacket _telemetry = new();
 
     private static SensorPacket _sensor = new();
+
     private static StatsPacket _stats = new();
 
     // Главный метод парсинга строки

@@ -21,5 +21,8 @@ namespace ShuttleManager.Shared.Services.Enums
         Right,                //    вперёд
         MoveDistanceForward,  // CMD_MOVE_DIST_F (с параметром)
         MoveDistanceBackward,  // CMD_MOVE_DIST_R (с параметром)
+        FRM, // LEGACY updater
+        UPD, // LEGACY updater
+        ManualCommand // LEGACY updater
     }
 }

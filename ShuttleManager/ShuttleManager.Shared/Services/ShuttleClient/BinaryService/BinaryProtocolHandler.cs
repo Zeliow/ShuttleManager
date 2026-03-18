@@ -1,8 +1,13 @@
 ﻿using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
+using ShuttleManager.Shared.Services.ShuttleClient.Command;
+using ShuttleManager.Shared.Services.ShuttleClient.Config;
+using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -154,23 +159,6 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         return crc;
     }
 
-    public async Task<bool> SendCommandAsync(ShuttleConnection connection, CmdType cmd, int arg1, int arg2, int timeoutMs = 1000)
-    {
-        if (connection.Transport == null) return false;
-
-        // Используем старый SendPacketAsync
-        if (arg1 == 0 && arg2 == 0)
-        {
-            var packet = new SimpleCmdPacket { CmdType = (byte)cmd };
-            return await SendPacketAsync(connection, MsgID.MSG_CMD_SIMPLE, packet, timeoutMs);
-        }
-        else
-        {
-            var packet = new ParamCmdPacket { CmdType = (byte)cmd, Arg = arg1 };
-            return await SendPacketAsync(connection, MsgID.MSG_CMD_WITH_ARG, packet, timeoutMs);
-        }
-    }
-
     private async Task<bool> SendPacketAsync<TPayload>(
         ShuttleConnection connection,
         MsgID msgId,
@@ -222,6 +210,7 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
                     pending.TrySetResult(false);
             });
 
+            Debug.WriteLine($"command {frame}");
             await connection.Transport.WriteAsync(frame, CancellationToken.None);
             await connection.Transport.FlushAsync(CancellationToken.None);
 
@@ -234,8 +223,74 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         }
     }
 
-    public Task<bool> SendCommandAsync(ShuttleConnection connection, string command, CancellationToken ct, int timeoutMs = 1000)
+    public Task<bool> SendConfigSetAsync(
+        ShuttleConnection connection,
+        ConfigParamID param,
+        int value,
+        int timeoutMs = 1000)
     {
-        throw new NotSupportedException("BinaryProtocolHandler does not support binary commands");
+        var packet = new ConfigPacket
+        {
+            ParamID = (byte)param,
+            Value = value
+        };
+
+        return SendPacketAsync(connection, MsgID.MSG_CONFIG_SET, packet, timeoutMs);
+    }
+
+    public Task<bool> SendCommandAsync(ShuttleConnection connection, ShuttleCommand cmd, int arg1, int arg2, CancellationToken ct, int timeoutMs = 1000)
+    {
+        var command = BinaryCommandMapper.Map(cmd);
+
+        if (cmd == ShuttleCommand.ManualCommand)
+        {
+            var type = (CmdType)arg1;
+
+            var packet = new SimpleCmdPacket { CmdType = (byte)type };
+            return SendPacketAsync(connection, MsgID.MSG_CMD_SIMPLE, packet, timeoutMs);
+        }
+
+        if (arg1 == 0 && arg2 == 0)
+        {
+            var packet = new SimpleCmdPacket { CmdType = (byte)command };
+            return SendPacketAsync(connection, MsgID.MSG_CMD_SIMPLE, packet, timeoutMs);
+        }
+        else
+        {
+            var packet = new ParamCmdPacket { CmdType = (byte)command, Arg = arg1 };
+            return SendPacketAsync(connection, MsgID.MSG_CMD_WITH_ARG, packet, timeoutMs);
+        }
+    }
+
+    public Task<bool> SendConfigAsync(ShuttleConnection connection, ShuttleConfigCommand param, int value, int timeoutMs = 1000)
+    {
+        var cmd = BinaryConfigMapper.Map(param);
+        return SendConfigSetAsync(connection, cmd, value, timeoutMs);
+    }
+
+    public Task<bool> SendDateTimeAsync(ShuttleConnection connection, DateTime utcTime, int timeoutMs = 1000)
+    {
+        var packet = new DateTimePacket
+        {
+            Year = (byte)(utcTime.Year - 2000),
+            Month = (byte)utcTime.Month,
+            Day = (byte)utcTime.Day,
+            Hour = (byte)utcTime.Hour,
+            Minute = (byte)utcTime.Minute,
+            Second = (byte)utcTime.Second
+        };
+
+        return SendPacketAsync(connection, MsgID.MSG_SET_DATETIME, packet, timeoutMs);
+    }
+
+    public Task<bool> SendManualCommandAsync(ShuttleConnection connection, string rawCommand, CancellationToken ct, int timeoutMs = 1000)
+    {
+        if (Enum.TryParse(rawCommand, true, out CmdType result))
+        {
+            // Формируем тот же пакет, что и в SendCommandAsync для ManualCommand
+            var packet = new SimpleCmdPacket { CmdType = (byte)result };
+            return SendPacketAsync(connection, MsgID.MSG_CMD_SIMPLE, packet, timeoutMs);
+        }
+        return Task.FromResult(false);
     }
 }

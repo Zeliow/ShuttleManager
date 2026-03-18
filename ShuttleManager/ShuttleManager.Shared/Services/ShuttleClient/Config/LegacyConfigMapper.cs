@@ -16,9 +16,7 @@ public static class LegacyConfigMapper
             ShuttleConfigCommand.DistOfEdge => $"{shuttleId}dMc{value}", // ok?
             ShuttleConfigCommand.ShuttleLength => $"{shuttleId}dSl{(value == 800 ? "080" : value)}",
             ShuttleConfigCommand.ShuttleNumber => $"{shuttleId}dNN{value}", // ok!
-            ShuttleConfigCommand.MoveDistanceBackward => $"{shuttleId}dMf{value}", // ok?
-            ShuttleConfigCommand.MoveDistanceForward => $"{shuttleId}dMr{value}", // ok?
-            ShuttleConfigCommand.DT => $"DT{currentTime:HH:mm:ss dd/MM/yyyy}", // ok?
+            //ShuttleConfigCommand.DT => $"DT{currentTime:HH:mm:ss dd/MM/yyyy}", // ok?
             _ => throw new NotSupportedException(
                 $"Конфигурационная команда '{cmd}' не поддерживается в легаси-протоколе")
         };
