@@ -23,6 +23,7 @@ public class Shuttle
 
     public double Temperature { get; set; } = 0.0;
     public double Angle { get; set; } = 0;
+    public int Length { get; set; } = 0;
     public int Position { get; set; } = 0;
     public string FifoLifoMode { get; set; } = "Unknown";
     public int ForwardDistance { get; set; } = 0;

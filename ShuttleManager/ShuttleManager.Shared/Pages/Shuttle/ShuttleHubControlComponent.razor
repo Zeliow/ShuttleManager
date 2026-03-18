@@ -1,5 +1,7 @@
 @using System.Diagnostics
+@using ShuttleManager.Shared.Interfaces
 @using ShuttleManager.Shared.Services
+@using ShuttleManager.Shared.Services.Enums
 @using ShuttleManager.Shared.Services.FilePicker
 @using ShuttleManager.Shared.Services.OtaUpdate
 @using ShuttleManager.Shared.Services.ShuttleClient
@@ -12,12 +14,16 @@
 @inject ILogger<ShuttleHubControlComponent> Logger
 @inject IFilePickerService FilePickerService
 @inject IOtaUpdateService OtaService
-@implements IAsyncDisposable
+@inject IWebBrowserService WebBrowserService
+@implements IDisposable
 
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
-            Шаттл №: @SetCorrentNumberShuttle(Shuttle.ShuttleNumber)
+            Шаттл №: @Shuttle.ShuttleNumber
+            <span class="badge @(IsConnected ? "bg-success" : "bg-warning") ms-2">
+                @(IsConnected ? "Подключен" : "Подключение...")
+            </span>
         </h5>
         <div>
             <button class="btn btn-sm btn-danger" @onclick="DisconnectThis" title="Отключиться">
@@ -88,15 +94,10 @@
                                                 <b class="bi bi-speedometer2">👁</b>
                                             </button>
 
-                                            @* <button class="btn btn-sm btn-outline-warning me-1"
-                                                @onclick="TopScadaView">
-                                            <b class="bi bi-speedometer2">?</b>
-                                        </button> *@
-
-                                            <button class="btn btn-sm btn-outline-info me-1"
-                                                    @onclick="StatsView">
-                                                <b class="bi bi-graph-up">📊</b>
-                                            </button>
+                                        <button class="btn btn-sm btn-outline-info me-1"
+                                                @onclick="StatsView">
+                                            <b class="bi bi-graph-up">📊</b>
+                                        </button>
 
                                             @if (!_showSensorsView && !_statsView)
                                             {
@@ -111,10 +112,6 @@
                                 {
                                     <ShuttleDataSensorComponent Shuttle="Shuttle" />
                                 }
-                                @*                                 else if (_showTopView)
-                                {
-                                    <ShuttleScadaView Shuttle="Shuttle" />
-                                } *@
                                 else if (_statsView)
                                 {
                                     <ShuttleStatsComponent Shuttle="Shuttle" />
@@ -194,9 +191,20 @@
                                                 <i class="bi bi-arrow-counterclockwise me-1">Сброс ошибок</i>
                                             </button>
                                         </div>
-                                        <div class="col-12">
+                                        <div class="col-12 mb-1">
                                             <button class="btn btn-danger btn-sm w-100 " @onclick="SendRebootShuttleCommand" title="Полная перезагрузка шаттла">
                                                 <b class="bi bi-arrow-repeat me-1">⟳</b>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 mb-1">
+                                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendUpdateStateShuttleCommand" title="Применить загруженное обновление">
+                                                <b class="bi bi-cloud-arrow-up me-1">Обновление экрана (UPD) (Browser)</b>
+                                            </button>
+                                        </div>
+
+                                        <div class="col-12 mb-1">
+                                            <button class="btn btn-outline-primary btn-sm w-100" @onclick="SendFRMFirmwareCommand" title="Открыть веб-интерфейс обновления прошивки">
+                                                <b class="bi bi-cloud-arrow-up me-1">Обновление платы (FRM) (Browser)</b>
                                             </button>
                                         </div>
                                     </div>
@@ -255,7 +263,7 @@
                                             </div>
                                             <div class="col-4 mb-1">
                                                 <button class="btn btn-sm w-100 p-2 @(isReversed ? "btn-warning" : "btn-danger")"
-                                                        @onclick="SendReverseShuttleCommand"
+                                                        @onclick="SendUseReverseModeShuttleCommand"
                                                         title="Реверс">
                                                     <i class="bi bi-download me-1"></i>Реверс 🔄
                                                 </button>
@@ -372,13 +380,6 @@
                                         <h6 class="fw-bold text-muted mb-0">Обновление</h6>
                                     </div>
                                     <div class="card-body p-2">
-                                        @*
-                                        <button @onclick="ChoiceFile">Select .bin</button>
-
-                                        @if (_selectedFile != null)
-                                        {
-                                        <p>@_selectedFile</p>*@
-
                                         <div class="row g-1">
                                             <div class="col-6 mb-1" style="text-align: center;">
                                                 <button class="btn btn-warning btn-sm w-100" disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Stm32)">
@@ -393,8 +394,6 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        @*  } *@
-
                                         @if (_isOtaRunning)
                                         {
                                             <div class="ota-box">
@@ -467,7 +466,6 @@
     private string TerminalOutputHtml => _terminalOutputHtml;
     private string ManualCommand { get => _manualCommand; set => _manualCommand = value; }
     private readonly List<string> _statusBlockLines = new();
-
     private string? _selectedFile;
     private int _otaPercent;
     private bool _isOtaRunning;
@@ -652,7 +650,7 @@
         return ipAddress == Shuttle.IPAddress;
     }
 
-    private async void OnHubConnected(string ip, int id)
+    private async void OnHubConnected(string ip, string id)
     {
         if (!IsEventForThisShuttle(ip)) return;
 
@@ -765,7 +763,7 @@
     {
         Shuttle.LastActivity = DateTime.Now;
         Shuttle.ErrorCode = (ShuttleFault)data.ErrorCode;
-        Shuttle.WarningCode = data.WarningCode;
+        Shuttle.WarningCode = data.WaringCode;
         Shuttle.CurrentStatus = ((ShuttleState)data.ShuttleStatus).ToString();
         Shuttle.Position = data.CurrentPosition;
         Shuttle.CurrentSpeed = data.Speed;
@@ -785,7 +783,7 @@
         Shuttle.ReverseDistance = data.DistanceR;
         Shuttle.ForwardPalletDistance = data.DistancePltF;
         Shuttle.ReversePalletDistance = data.DistancePltR;
-        Shuttle.Angle = data.Angle * (360.0 / 4096.0);
+        Shuttle.Angle = data.Angle * (360.0 * 4096.0);
         Shuttle.Temperature = data.Temperature_dC / 10.0;
 
         // Map Hardware Flags
@@ -853,27 +851,31 @@
         }
     }
 
-    private async Task SendBinaryCmd(CmdType cmd, int arg1 = 0, int arg2 = 0, string description = "")
+    // NEW METHOW TWICE PROTOCOL
+    private async Task SendCommand(
+    ShuttleCommand cmd,
+    string description,
+    int arg1 = 0,
+    int arg2 = 0)
     {
-        if (!Shuttle.IsConnected || Shuttle.IPAddress is null)
+        if (!Shuttle.IsConnected)
         {
             LogToTerminal("[ERROR] Нет подключения\n");
             return;
         }
 
+        if (Shuttle.IPAddress == null)
+            return;
+
         _isCommandInProgress = true;
+
         try
         {
-            StateHasChanged();
-            LogToTerminal($"[CMD] Отправка: {cmd} ({description})\n");
+            LogToTerminal($"[CMD] {description}\n");
 
-            var success = await HubClientService.SendBinaryCommandAsync(Shuttle.IPAddress, cmd, arg1, arg2);
-            if (!success) LogToTerminal($"[WARNING] Команда {cmd} не подтверждена\n");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Ошибка отправки команды {Command} к {IpAddress}", cmd, Shuttle.IPAddress);
-            LogToTerminal($"[ERROR] Исключение: {ex.Message}\n");
+            await HubClientService.SendCommandAsync(
+                Shuttle.IPAddress,
+                cmd, arg1, arg2);
         }
         finally
         {
@@ -882,20 +884,28 @@
         }
     }
 
-    private async Task SendConfigSet(ConfigParamID param, int value, string description = "")
+    // NEW TWICE Метод для конфигурационных команд
+    private async Task SendConfigCommand(
+        ShuttleConfigCommand param,
+        int value,
+        string description)
     {
-        if (!Shuttle.IsConnected || Shuttle.IPAddress is null) return;
+        if (!Shuttle.IsConnected)
+        {
+            LogToTerminal("[ERROR] Нет подключения\n");
+            return;
+        }
+
+        if (Shuttle.IPAddress == null)
+            return;
 
         _isCommandInProgress = true;
+
         try
         {
-            StateHasChanged();
-            LogToTerminal($"[CFG] Установка {param}={value} ({description})\n");
-            await HubClientService.SendConfigSetAsync(Shuttle.IPAddress, param, value);
-        }
-        catch (Exception ex)
-        {
-            LogToTerminal($"[ERROR] {ex.Message}\n");
+            LogToTerminal($"[CONFIG] {description}\n");
+            await HubClientService.SendConfigAsync(
+                Shuttle.IPAddress, param, value);
         }
         finally
         {
@@ -904,34 +914,113 @@
         }
     }
 
-    // Command Handlers
-    private async Task SendStopCommand() => await SendBinaryCmd(CmdType.CMD_STOP, 0, 0, "Остановка");
-    private async Task SendLoadCommand() => await SendBinaryCmd(CmdType.CMD_LOAD, 0, 0, "Загрузка");
-    private async Task SendLargeLoadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_LOAD, 0, 0, "Длительная загрузка");
-    private async Task SendUnloadCommand() => await SendBinaryCmd(CmdType.CMD_UNLOAD, 0, 0, "Выгрузка");
-    private async Task SendLargeUnloadCommand() => await SendBinaryCmd(CmdType.CMD_LONG_UNLOAD, 0, 0, "Длительная выгрузка");
-    private async Task SendManualShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MANUAL_MODE, 0, 0, "Ручной режим");
-    private async Task SendDemoCommand() => await SendBinaryCmd(CmdType.CMD_DEMO, 0, 0, "Демо-режим");
-    private async Task SendResetCommand() => await SendBinaryCmd(CmdType.CMD_RESET_ERROR, 0, 0, "Сброс ошибок");
-    private async Task SendSaveSettingCommand() => await SendBinaryCmd(CmdType.CMD_SAVE_EEPROM, 0, 0, "Сохранение настроек");
-    private async Task SendCalibrateCommand() => await SendBinaryCmd(CmdType.CMD_CALIBRATE, 0, 0, "Калибровка шаттла");
-    private async Task SendGoHomeCommand() => await SendBinaryCmd(CmdType.CMD_HOME, 0, 0, "Возвращение домой");
-    private async Task SendUseReverseModeShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 1, "Реверс режим");
-    private async Task SendSealingForwardShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_F, 0, 0, "Уплотнение вперед");
-    private async Task SendSealingBackShuttleCommand() => await SendBinaryCmd(CmdType.CMD_COMPACT_R, 0, 0, "Уплотнение назад");
-    private async Task SendUpShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_UP, 0, 0, "Подъём");
-    private async Task SendLeftShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_LEFT_MAN, 0, 0, "движение назад");
-    private async Task SendRightShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_RIGHT_MAN, 0, 0, "движение вперёд");
-    private async Task SendDownShuttleCommand() => await SendBinaryCmd(CmdType.CMD_LIFT_DOWN, 0, 0, "Спуск");
-    private async Task SendRebootShuttleCommand() => await SendBinaryCmd(CmdType.CMD_SYSTEM_RESET, 0, 0, "Reboot shuttle");
-    private async Task SendSetMoveReverseShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_DIST_R, MoveDistanceBackwardInput, 0, $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм");
-    private async Task SendMoveForwardShuttleCommand() => await SendBinaryCmd(CmdType.CMD_MOVE_DIST_F, MoveDistanceForwardInput, 0, $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм");
-    private async Task SendSetMaxSpeedShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_MAX_SPEED, MaxSpeedInput, $"Установка максимальной скорости: {MaxSpeedInput}%");
-    private async Task SendSetMinPowerShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_MIN_BATT, MinPowerInput, $"Установка уровня защиты батареи: {MinPowerInput}%");
-    private async Task SendSetPalletBetweenDistanceShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_INTER_PALLET, PallentDistance, $"Установка межпаллетного расстояния: {PallentDistance}%");
-    private async Task SendSetDistanceOfEdgeShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_CHNL_OFFSET, DistanceOfEdge, $"Установка расстояния от края: {DistanceOfEdge} мм");
-    private async Task SendSetlenghtOfShuttleCommand() => await SendConfigSet(ConfigParamID.CFG_SHUTTLE_LEN, LenghtOfShuttle, $"Установка длины шаттла: {LenghtOfShuttle} мм");
-    private async Task SendSetShuttleNumCommand() => await SendConfigSet(ConfigParamID.CFG_SHUTTLE_NUM, ShuttleNumberInput, $"Установка номера шаттла: {ShuttleNumberInput}");
+    //TEST TWICE METHOD
+    private async Task SendStopCommand()
+        => await SendCommand(ShuttleCommand.Stop, "Остановка");
+
+    private async Task SendLoadCommand()
+        => await SendCommand(ShuttleCommand.Load, "Загрузка");
+
+    private async Task SendLargeLoadCommand()
+        => await SendCommand(ShuttleCommand.LongLoad, "Длительная загрузка");
+
+    private async Task SendUnloadCommand()
+        => await SendCommand(ShuttleCommand.Unload, "Выгрузка");
+
+    private async Task SendLargeUnloadCommand()
+        => await SendCommand(ShuttleCommand.LongUnload, "Длительная выгрузка");
+
+    private async Task SendDemoCommand()
+        => await SendCommand(ShuttleCommand.Demo, "Демо-режим");
+
+    private async Task SendResetCommand()
+        => await SendCommand(ShuttleCommand.Reset, "Сброс ошибок");
+
+    private async Task SendSaveSettingCommand()
+        => await SendCommand(ShuttleCommand.SaveConfig, "Сохранение настроек");
+
+    private async Task SendCalibrateCommand()
+        => await SendCommand(ShuttleCommand.Calibrate, "Калибровка шаттла");
+
+    private async Task SendGoHomeCommand()
+        => await SendCommand(ShuttleCommand.Home, "Возвращение домой");
+
+    private async Task SendSealingForwardShuttleCommand()
+        => await SendCommand(ShuttleCommand.SealForward, "Уплотнение вперед");
+
+    private async Task SendSealingBackShuttleCommand()
+        => await SendCommand(ShuttleCommand.SealBackward, "Уплотнение назад");
+
+    private async Task SendUpShuttleCommand()
+        => await SendCommand(ShuttleCommand.LiftUp, "Подъём");
+
+    private async Task SendLeftShuttleCommand()
+        => await SendCommand(ShuttleCommand.Left, "Назад");
+
+    private async Task SendRightShuttleCommand()
+        => await SendCommand(ShuttleCommand.Right, "Вперёд");
+
+    private async Task SendDownShuttleCommand()
+        => await SendCommand(ShuttleCommand.LiftDown, "Спуск");
+
+    private async Task SendRebootShuttleCommand()
+        => await SendCommand(ShuttleCommand.SystemReset, "Reboot shuttle");
+
+    // config button with param
+    private async Task SendSetMoveReverseShuttleCommand()
+        => await SendCommand(
+            ShuttleCommand.MoveDistanceBackward, $"Проезд расстояния назад: {MoveDistanceBackwardInput} мм", MoveDistanceBackwardInput);
+
+    private async Task SendMoveForwardShuttleCommand()
+        => await SendCommand(
+            ShuttleCommand.MoveDistanceForward, $"Проезд расстояния вперёд: {MoveDistanceForwardInput} мм", MoveDistanceForwardInput);
+
+    // === Конфигурационные команды ===
+
+    private bool isReversed = false;
+    private async Task SendUseReverseModeShuttleCommand()
+    {
+        if (!isReversed)
+        {
+            await SendConfigCommand(ShuttleConfigCommand.ReverseMode, 1, "Реверс режим ON");
+            isReversed = !isReversed;
+        }
+        else
+        {
+            await SendConfigCommand(ShuttleConfigCommand.ReverseMode, 0, "Реверс режим OFF");
+            isReversed = !isReversed;
+        }
+    }
+
+    private async Task SendSetMaxSpeedShuttleCommand()
+        => await SendConfigCommand(
+            ShuttleConfigCommand.MaxSpeed, MaxSpeedInput,
+            $"Установка максимальной скорости: {MaxSpeedInput}%");
+
+    private async Task SendSetMinPowerShuttleCommand()
+        => await SendConfigCommand(
+            ShuttleConfigCommand.MinBattery, MinPowerInput,
+            $"Установка уровня защиты батареи: {MinPowerInput}%");
+
+    private async Task SendSetPalletBetweenDistanceShuttleCommand()
+        => await SendConfigCommand(
+            ShuttleConfigCommand.InterPalletDistance, PallentDistance,
+            $"Установка межпаллетного расстояния: {PallentDistance}%");
+
+    private async Task SendSetDistanceOfEdgeShuttleCommand()
+        => await SendConfigCommand(
+            ShuttleConfigCommand.DistOfEdge, DistanceOfEdge,
+            $"Установка расстояния от края: {DistanceOfEdge} мм");
+
+    private async Task SendSetlenghtOfShuttleCommand()
+        => await SendConfigCommand(
+            ShuttleConfigCommand.ShuttleLength, LenghtOfShuttle,
+            $"Установка длины шаттла: {LenghtOfShuttle} мм");
+
+    private async Task SendSetShuttleNumCommand()
+        => await SendConfigCommand(
+            ShuttleConfigCommand.ShuttleNumber, ShuttleNumberInput,
+            $"Установка номера шаттла: {ShuttleNumberInput}");
 
     private async Task SetTime()
     {
@@ -949,12 +1038,11 @@
 
             LogToTerminal("[CMD] Установка времени\n");
 
-            var success = await HubClientService.SendDateTimeAsync(
+            await HubClientService.SendDateTimeAsync(
                 Shuttle.IPAddress,
                 DateTime.UtcNow);
 
-            if (!success)
-                LogToTerminal("[WARNING] Установка времени не подтверждена\n");
+            LogToTerminal("[WARNING] Установка времени\n");
         }
         catch (Exception ex)
         {
@@ -968,38 +1056,30 @@
         }
     }
 
-    private bool isReversed = false;
-    private async Task SendReverseShuttleCommand()
+    private async Task SendManualCommand()
     {
-        if (!isReversed)
+        if (string.IsNullOrWhiteSpace(_manualCommand))
+            return;
+
+        var cmd = _manualCommand.Trim();
+
+        if (Enum.TryParse(cmd, true, out CmdType result))
         {
-            isReversed = true;
-            await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 1, "Реверс режим on");
+            // ✅ NEW PROTOCOL: Typed command
+            LogToTerminal($"[NEW PROTOCOL] Отправка бинарной команды: {result}\n");
+            await HubClientService.SendManualCommandAsync(Shuttle.IPAddress!, cmd);
         }
         else
         {
-            await SendConfigSet(ConfigParamID.CFG_REVERSE_MODE, 0, "Реверс режим off");
-            isReversed = false;
-        }
-    }
+            // ⚠️ LEGACY PROTOCOL: Raw string fallback
+            LogToTerminal($"[ERROR] Неизвестная команда '{_manualCommand}'. Введите имя команды (например, CMD_STOP)\n");
+            LogToTerminal($"[LEGACY PROTOCOL] Команда не найдена в энумах. Отправка raw-строки: '{cmd}'\n");
 
-    private async Task SendManualCommand()
-    {
-        if (!string.IsNullOrWhiteSpace(_manualCommand))
-        {
-            // Try to parse command? Or just send raw?
-            // Since we don't have text command support, we can't do much.
-            // Maybe user enters "5" for stop?
-            if (Enum.TryParse(_manualCommand, true, out CmdType result))
-            {
-                await SendBinaryCmd(result, 0, 0, "Ручная команда");
-            }
-            else
-            {
-                LogToTerminal($"[ERROR] Неизвестная команда '{_manualCommand}'. Введите имя команды (например, CMD_STOP)\n");
-            }
-            _manualCommand = "";
+            // Важно: передаём информацию, что это legacy, если это возможно через аргументы
+            await HubClientService.SendManualCommandAsync(Shuttle.IPAddress!, cmd);
         }
+
+        _manualCommand = "";
     }
 
     private async Task HandleKeyPress(KeyboardEventArgs e)
@@ -1007,6 +1087,43 @@
         if (e.Key == "Enter")
         {
             await SendManualCommand();
+        }
+    }
+
+    private async Task SendFRMFirmwareCommand() => await SendUpdateCommandAndOpenBrowser();
+
+    private async Task SendUpdateStateShuttleCommand() => await SendUPDCommandAndOpenBrowser();
+
+    private async Task SendUpdateCommandAndOpenBrowser()
+    {
+        await SendCommand(ShuttleCommand.FRM, "Обновление экрана");
+        await OpenWebInterfaceAsync("FRM");
+    }
+
+    private async Task SendUPDCommandAndOpenBrowser()
+    {
+        await SendCommand(ShuttleCommand.UPD, "Обновление контроллера");
+        await OpenWebInterfaceAsync("UPD");
+    }
+
+    private async Task OpenWebInterfaceAsync(string argOpenBrowser)
+    {
+        var url = $"http://{Shuttle.IPAddress}/";
+        if (argOpenBrowser == "UPD")
+        {
+            url += "update";
+        }
+
+        try
+        {
+            var uri = new Uri(url);
+            await WebBrowserService.OpenBrowserAsync(uri);
+            LogToTerminal($"[INFO] Открыт веб-интерфейс: {url}\n");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка открытия веб-интерфейса {Url}", url);
+            LogToTerminal($"[ERROR] Не удалось открыть браузер: {ex.Message}\n");
         }
     }
 
