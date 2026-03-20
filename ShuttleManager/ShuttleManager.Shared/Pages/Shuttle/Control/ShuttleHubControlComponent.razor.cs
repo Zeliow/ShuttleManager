@@ -49,7 +49,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private int _pallentDistance = 0;
     private static bool IsAndroid => OperatingSystem.IsAndroid();
 
-    private readonly Channel<string> _logChannel = Channel.CreateUnbounded<string>();
+    private readonly Channel<(string Message, DateTime Timestamp)> _logChannel = Channel.CreateUnbounded<(string, DateTime)>();
     private readonly List<string> _statusBlockLines = new();
 
     private string _manualCommand = string.Empty;
@@ -258,8 +258,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void ParseAndHandleResponse(string response)
     {
         var line = response.Trim();
+        var lineSpan = line.AsSpan();
 
-        if (line.StartsWith("CB"))
+        if (lineSpan.StartsWith("CB"))
         {
             var match = CbRegex().Match(line);
             if (match.Success && int.TryParse(match.Groups[1].Value, out int batteryPercentageScr))
@@ -268,7 +269,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed CB: Battery {batteryPercentageScr}%");
             }
         }
-        else if (line.StartsWith("Batt"))
+        else if (lineSpan.StartsWith("Batt"))
         {
             var match = BattRegex().Match(line);
             if (match.Success)
@@ -284,7 +285,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Inverse"))
+        else if (lineSpan.StartsWith("Inverse"))
         {
             var match = InverseRegex().Match(line);
             if (match.Success)
@@ -293,7 +294,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed Inverse: {Shuttle.Inverse}");
             }
         }
-        else if (line.StartsWith("Status"))
+        else if (lineSpan.StartsWith("Status"))
         {
             var match = StatusRegex().Match(line);
             if (match.Success)
@@ -307,7 +308,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed Status: {Shuttle.CurrentStatus} ({Shuttle.StatusCode})");
             }
         }
-        else if (line.StartsWith("MPR"))
+        else if (lineSpan.StartsWith("MPR"))
         {
             var match = MprRegex().Match(line);
             if (match.Success)
@@ -321,7 +322,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Shuttle number"))
+        else if (lineSpan.StartsWith("Shuttle number"))
         {
             var match = ShuttleInfoRegex().Match(line);
             if (match.Success)
@@ -334,7 +335,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Temperature"))
+        else if (lineSpan.StartsWith("Temperature"))
         {
             var match = TempRegex().Match(line);
             if (match.Success)
@@ -346,7 +347,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Angle"))
+        else if (lineSpan.StartsWith("Angle"))
         {
             var match = AngleRegex().Match(line);
             if (match.Success)
@@ -362,7 +363,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("FIFO_LIFO"))
+        else if (lineSpan.StartsWith("FIFO_LIFO"))
         {
             var match = FifoLifoRegex().Match(line);
             if (match.Success)
@@ -371,7 +372,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed FIFO/LIFO: {Shuttle.FifoLifoMode}");
             }
         }
-        else if (line.StartsWith("Forwrd dist"))
+        else if (lineSpan.StartsWith("Forwrd dist"))
         {
             var match = DistRegex().Match(line);
             if (match.Success)
@@ -385,7 +386,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Forwrd plt dist"))
+        else if (lineSpan.StartsWith("Forwrd plt dist"))
         {
             var match = PltDistRegex().Match(line);
             if (match.Success)
@@ -399,7 +400,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Plt dtchk"))
+        else if (lineSpan.StartsWith("Plt dtchk"))
         {
             var match = PltDetRegex().Match(line);
             if (match.Success)
@@ -423,7 +424,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("In channel"))
+        else if (lineSpan.StartsWith("In channel"))
         {
             var match = InChanRegex().Match(line);
             if (match.Success)
@@ -432,7 +433,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed In Channel: {Shuttle.IsInChannel}");
             }
         }
-        else if (line.StartsWith("Lifter"))
+        else if (lineSpan.StartsWith("Lifter"))
         {
             var match = LifterRegex().Match(line);
             if (match.Success)
@@ -442,7 +443,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed Lifter: UP={Shuttle.IsLifterUp}, DOWN={Shuttle.IsLifterDown}");
             }
         }
-        else if (line.StartsWith("Bumper"))
+        else if (lineSpan.StartsWith("Bumper"))
         {
             var match = BumperRegex().Match(line);
             if (match.Success)
@@ -456,7 +457,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Zero point MPR"))
+        else if (lineSpan.StartsWith("Zero point MPR"))
         {
             var match = ZeroOffRegex().Match(line);
             if (match.Success)
@@ -470,7 +471,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Wait time on unload"))
+        else if (lineSpan.StartsWith("Wait time on unload"))
         {
             var match = WaitTimeRegex().Match(line);
             if (match.Success)
@@ -489,31 +490,55 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
-        _logChannel.Writer.TryWrite(log);
+        // Offload logging to background loop to avoid blocking network thread
+        _logChannel.Writer.TryWrite((log, DateTime.Now));
     }
 
     private async Task ProcessLogsLoopAsync()
     {
         try
         {
+            var batchLogs = new List<(string Message, DateTime Timestamp)>();
+            var terminalBatch = new List<string>();
+            var fileBatch = new List<string>();
+
             while (!_componentCts.Token.IsCancellationRequested)
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
+                    batchLogs.Clear();
+                    terminalBatch.Clear();
+                    fileBatch.Clear();
+
+                    while (_logChannel.Reader.TryRead(out var logItem))
+                    {
+                        batchLogs.Add(logItem);
+                    }
+
+                    if (batchLogs.Count == 0) continue;
+
+                    // 1. Prepare file logging (outside UI thread)
+                    foreach (var (message, timestamp) in batchLogs)
+                    {
+                        fileBatch.Add($"[{timestamp}] {message}");
+                    }
+
+                    try
+                    {
+                        await File.AppendAllLinesAsync(pathLogShuttle, fileBatch, _componentCts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to write logs to file");
+                    }
+
+                    // 2. Process UI updates in a single batch
                     await InvokeAsync(() =>
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
+                        foreach (var (log, timestamp) in batchLogs)
                         {
                             ParseAndHandleResponse(log);
+
                             if (log.StartsWith("-----------------------------------------------"))
                             {
                                 if (!_inStatusBlock)
@@ -534,28 +559,26 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
 
                             if (log.Contains("##HEARTBEAT##"))
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                terminalBatch.Add($"[HEARTBEAT] {log}\n");
                             }
                             else
                             {
                                 var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                terminalBatch.Add($"[{timestamp:HH:mm:ss}] {cleanLog}\n");
                             }
-
-                            stateChanged = true;
                         }
 
-                        if (stateChanged)
+                        if (terminalBatch.Count > 0)
                         {
-                            StateHasChanged();
+                            Shuttle.AddRangeTerminalMessages(terminalBatch);
                         }
+
+                        StateHasChanged();
                     });
 
-                    if (stateChanged)
-                    {
-                        _ = ScrollTerminalToBottomAsync();
-                    }
+                    _ = ScrollTerminalToBottomAsync();
 
+                    // Throttling to prevent UI saturation
                     await Task.Delay(100, _componentCts.Token);
                 }
             }
@@ -566,16 +589,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Ошибка в цикле обработки логов");
-        }
-    }
-
-    private void LogToTerminalInternal(string message)
-    {
-        Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
         }
     }
 
@@ -808,12 +821,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
-
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }
