@@ -18,6 +18,7 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
         builder.Services.AddSingleton<IShuttleHubClientService, ShuttleHubClientService>();
+        builder.Services.AddSingleton<IWebBrowserService, WebBrowserService>();
         builder.Services.AddSingleton<IFilePickerService, FilePickerService>();
         builder.Services.AddSingleton<IOtaUpdateService, OtaUpdateService>();
         builder.Services.AddMauiBlazorWebView();

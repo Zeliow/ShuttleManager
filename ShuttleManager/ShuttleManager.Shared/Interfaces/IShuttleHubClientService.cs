@@ -25,6 +25,8 @@ public interface IShuttleHubClientService
 
     public Task<bool> SendManualCommandAsync(string ip, string rawCommand, int timeoutMs = 1000);
 
+    public Task<bool> RequestFullConfigAsync(string ip);
+
     List<Shuttle> GetConnectedShuttles();
 
     public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000);

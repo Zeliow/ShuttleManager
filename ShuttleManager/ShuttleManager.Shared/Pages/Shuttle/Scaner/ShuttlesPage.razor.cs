@@ -25,7 +25,7 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
     protected int activeTabIndex = -1;
     protected Timer? _cleanupTimer;
 
-    protected string[] shuttleNums = { "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32" };
+    protected string[] shuttleNums = ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32"];
 
     // Dark theme
     protected ElementReference toggleElement;

@@ -74,8 +74,6 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         if (!text.EndsWith("\n"))
             text += "\n";
         var data = Encoding.UTF8.GetBytes(text);
-        Debug.WriteLine($"command text: {text}");
-        Debug.WriteLine($"command data: {data}");
         await connection.Transport!.WriteAsync(data, cancellationToken);
         await connection.Transport.FlushAsync(cancellationToken);
 

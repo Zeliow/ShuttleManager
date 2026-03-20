@@ -126,6 +126,7 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
             MsgID.MSG_CONFIG_SET => new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) },
             MsgID.MSG_CONFIG_GET => new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) },
             MsgID.MSG_CONFIG_REP => new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) },
+            MsgID.MSG_CONFIG_SYNC_REP => new FullConfigMessage { Data = MemoryMarshal.Read<FullConfigPacket>(payload) },
             MsgID.MSG_ACK => HandleAck(payload),
             _ => null // НЕ создаем новых MsgID!
         };
@@ -242,7 +243,13 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         return SendPacketAsync(connection, MsgID.MSG_CONFIG_SET, packet, timeoutMs);
     }
 
-    public Task<bool> SendCommandAsync(ShuttleConnection connection, ShuttleCommand cmd, int arg1, int arg2, CancellationToken ct, int timeoutMs = 1000)
+    public Task<bool> SendCommandAsync(
+        ShuttleConnection connection,
+        ShuttleCommand cmd,
+        int arg1,
+        int arg2,
+        CancellationToken ct,
+        int timeoutMs = 1000)
     {
         var command = BinaryCommandMapper.Map(cmd);
 
@@ -297,5 +304,63 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         }
 
         return Task.FromResult(false);
+    }
+
+    public Task<bool> RequestFullConfigAsync(
+    ShuttleConnection connection,
+    int timeoutMs = 1000)
+    {
+        return SendRequestAsync(connection, MsgID.MSG_CONFIG_SYNC_REQ, default(EmptyPacket));
+    }
+
+    public struct EmptyPacket
+    {
+    }
+
+    private async Task<bool> SendRequestAsync<TPayload>(
+    ShuttleConnection connection,
+    MsgID msgId,
+    TPayload payload)
+    where TPayload : struct
+    {
+        if (connection.Transport == null)
+            return false;
+
+        byte seq = connection.NextSeq++;
+
+        int payloadSize = Marshal.SizeOf<TPayload>();
+        const int headerSize = 6;
+        const int crcSize = 2;
+        int frameSize = headerSize + payloadSize + crcSize;
+
+        byte[] frame = new byte[frameSize];
+
+        // Header
+        frame[0] = PROTOCOL_SYNC_1_V2;
+        frame[1] = PROTOCOL_SYNC_2_V2;
+        frame[2] = (byte)msgId;
+        frame[3] = ProtocolConstants.TARGET_ID_NONE;
+        frame[4] = seq;
+        frame[5] = (byte)payloadSize;
+
+        // Payload
+        MemoryMarshal.Write(frame.AsSpan(headerSize, payloadSize), in payload);
+
+        // CRC
+        ushort crc = Crc16Ccitt(frame.AsSpan(0, headerSize + payloadSize));
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            frame.AsSpan(headerSize + payloadSize, 2),
+            crc);
+
+        try
+        {
+            await connection.Transport.WriteAsync(frame, CancellationToken.None);
+            await connection.Transport.FlushAsync(CancellationToken.None);
+            return true; // пакет отправлен, не ждём ACK
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

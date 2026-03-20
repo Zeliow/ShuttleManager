@@ -577,15 +577,15 @@ public struct StatsPacket
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct FullConfigPacket
 {
-    public ushort InterPallet;
-    public ushort ShuttleLen;
-    public ushort MaxSpeed;
-    public ushort WaitTime;
-    public short MprOffset;
-    public short ChnlOffset;
-    public byte ShuttleNumber;
-    public byte MinBatt;
-    public byte FifoLifo;
+    public ushort InterPallet; // межпал расст
+    public ushort ShuttleLen; // длин шаттла
+    public ushort MaxSpeed; // макс скорость
+    public ushort WaitTime; // время ожидания?
+    public short MprOffset; // Смещение?
+    public short ChnlOffset; // смещение канала
+    public byte ShuttleNumber; // Номер шаттла
+    public byte MinBatt; // Лимит батаери
+    public byte FifoLifo; // ФИФО ЛИФО
     public byte ReverseMode;
 }
 

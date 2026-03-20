@@ -39,7 +39,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private readonly SemaphoreSlim _logLock = new(1, 1);
 
-    private int _shuttleNumberInput = 1;
+    private int _shuttleNumberInput = 0;
     private int _moveDistanceBackwardInput = 0;
     private int _moveDistanceForwardInput = 0;
     private int _distanceOfEdge = 0;
@@ -92,7 +92,8 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.LogReceived += OnLogReceived;
             Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
-            StateHasChanged();
+
+            //StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -234,22 +235,47 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         return ipAddress == Shuttle.IPAddress;
     }
 
-    private async void OnHubConnected(string ip, string id)
+    private void OnHubConnected(string ip, string id)
+    {
+        _ = HandleHubConnectedAsync(ip, id);
+    }
+
+    private async Task HandleHubConnectedAsync(string ip, string id)
     {
         if (!IsEventForThisShuttle(ip))
-            return;
+            return; // фильтруем все неактивные
 
+        // Обновляем состояние UI
         await InvokeAsync(() =>
         {
             Shuttle.IsConnected = true;
             Shuttle.ConnectionTime = DateTime.Now;
             Shuttle.LastActivity = DateTime.Now;
-            LogToTerminal($"[SUCCESS] Подключено к шаттлу ID: {id}\n");
+            Logger.LogInformation($"[SUCCESS] Подключено к шаттлу ID: {id}\n");
             StateHasChanged();
         });
+
+        // небольшая задержка, чтобы полностью инициализировать соединение
+        await Task.Delay(1000);
+
+        if (HubClientService != null)
+        {
+            // Запрос FullConfig только для активного шаттла
+            bool result = await HubClientService.RequestFullConfigAsync(ip);
+
+            if (!result)
+                Debug.WriteLine($"[WARNING] Не удалось запросить FullConfig для {ip}");
+            else
+                Debug.WriteLine($"[INFO] FullConfig запрос отправлен для {ip}");
+        }
     }
 
-    private async void OnHubDisconnected(string ip)
+    private void OnHubDisconnected(string ip)
+    {
+        _ = HandleHubDisconnectedAsync(ip);
+    }
+
+    private async Task HandleHubDisconnectedAsync(string ip)
     {
         if (!IsEventForThisShuttle(ip))
             return;
@@ -258,7 +284,6 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         {
             Shuttle.IsConnected = false;
             LogToTerminal("[WARNING] Соединение разорвано\n");
-            StateHasChanged();
             _ = OnDisconnected.InvokeAsync(ip);
         });
     }
@@ -272,6 +297,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             RawLogMessage => "raw",
             ConfigMessage => "config",
             AckMessage => "ack",
+            FullConfigMessage => "fullConfig",
             _ => "unknown"
         };
 
@@ -306,8 +332,22 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         _ = ProcessLogAsync(ip, msg);
     }
 
+    private bool isFirstConfig = true;
+
     private async Task ProcessLogAsync(string ip, ShuttleMessageBase msg)
     {
+        if (isFirstConfig)
+        {
+            bool result = await HubClientService.RequestFullConfigAsync(Shuttle.IPAddress!);
+
+            if (result)
+                LogToTerminal($"[INFO] FullConfig запрос отправлен\n");
+            else
+                LogToTerminal($"[WARNING] Не удалось отправить FullConfig\n");
+
+            isFirstConfig = false;
+        }
+
         if (!IsEventForThisShuttle(ip))
             return;
 
@@ -339,6 +379,8 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
                 UpdateStats(stm.Data);
             else if (msg is ConfigMessage cm)
                 UpdateConfig(cm.Data);
+            else if (msg is FullConfigMessage fcm)
+                UpdateFullConfig(fcm.Data);
 
             if (msg is RawLogMessage or AckMessage or ConfigMessage)
             {
@@ -446,6 +488,31 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
                 Shuttle.FifoLifoMode = data.Value == 1 ? "LIFO" : "FIFO"; // Assuming mapping? Or just string?
                 break;
         }
+    }
+
+    private void UpdateFullConfig(FullConfigPacket Data)
+    {
+        Shuttle.InterPalleteDistance = Data.InterPallet;
+        Shuttle.ShuttleLength = Data.ShuttleLen;
+        Shuttle.MaxSpeed = Data.MaxSpeed;
+        Shuttle.WaitTimeUnload = Data.WaitTime;
+        Shuttle.ZeroPointMpr = Data.MprOffset;
+        Shuttle.ChannelOffset = Data.ChnlOffset;
+        Shuttle.ShuttleNumber = Convert.ToString(Data.ShuttleNumber);
+        Shuttle.BatteryLimit = Data.MinBatt;
+        Shuttle.FifoLifoMode = Data.FifoLifo == 1 ? "LIFO" : "FIFO";
+
+        //Shuttle.Reve Data.ReverseMode;
+        SetValueOfShuttle();
+    }
+
+    private void SetValueOfShuttle()
+    {
+        _pallentDistance = Shuttle.InterPalleteDistance;
+        _shuttleNumberInput = Convert.ToInt16(Shuttle.ShuttleNumber);
+        _maxSpeedInput = Shuttle.MaxSpeed;
+        _minPowerInput = Shuttle.BatteryLimit;
+        _lenghtOfShuttle = Shuttle.ShuttleLength;
     }
 
     // NEW METHOW TWICE PROTOCOL
@@ -754,7 +821,8 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             string.Empty,
             Shuttle.GetTerminalMessages().Select(line =>
                 $"<div class=\"terminal-line\">{System.Net.WebUtility.HtmlEncode(line)}</div>"));
-        StateHasChanged();
+
+        //StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }
 

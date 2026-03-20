@@ -275,6 +275,17 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         return await conn.Handler.SendManualCommandAsync(conn, rawCommand, CancellationToken.None, 1000);
     }
 
+    public async Task<bool> RequestFullConfigAsync(string ip)
+    {
+        if (!_connections.TryGetValue(ip, out var conn))
+            return false;
+
+        if (conn.Handler is not BinaryProtocolHandler binary)
+            return false;
+
+        return await binary.RequestFullConfigAsync(conn);
+    }
+
     public void DisconnectFromShuttle(string ipAddress)
     {
         _ = InternalDisconnectAsync(ipAddress);
