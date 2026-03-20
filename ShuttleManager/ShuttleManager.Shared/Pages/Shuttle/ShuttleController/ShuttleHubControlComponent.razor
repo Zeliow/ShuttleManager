@@ -105,7 +105,10 @@
                                     <div id="terminalContainer_@ComponentId"
                                          class="terminal-container border rounded"
                                          style="height: 298px;">
-                                        @((MarkupString)TerminalOutputHtml)
+                                        @foreach (var line in Shuttle.GetTerminalMessages())
+                                        {
+                                            <div class="terminal-line">@line</div>
+                                        }
                                     </div>
 
                                     <div class="input-group input-group-sm mt-2">

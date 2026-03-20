@@ -62,39 +62,42 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000)
     {
         var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        var range = Enumerable.Range(startIp, endIp - startIp + 1);
 
-        for (int i = startIp; i <= endIp; i++)
+        await Parallel.ForEachAsync(range, new ParallelOptions { MaxDegreeOfParallelism = 32 }, async (i, ct) =>
         {
             string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            try
             {
+                using var client = new TcpClient();
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(timeoutMs);
+
                 try
                 {
-                    using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
+                    await client.ConnectAsync(IPAddress.Parse(ip), port, timeoutCts.Token);
+                    if (client.Connected)
                     {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
-                        {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
-                        }
+                        Debug.WriteLine($"[Scan] Found device at {ip}");
+                        lock (foundDevices)
+                            foundDevices.Add(IPAddress.Parse(ip));
                     }
-                    catch (OperationCanceledException)
-                    {
-                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Timeout or overall cancellation
                 }
                 catch (SocketException)
                 {
+                    // No device at this IP/port
                 }
-            });
-            tasks.Add(task);
-        }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Scan] Error scanning {ip}: {ex.Message}");
+            }
+        });
 
-        await Task.WhenAll(tasks);
         return foundDevices;
     }
 

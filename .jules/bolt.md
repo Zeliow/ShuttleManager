@@ -1,0 +1,3 @@
+## 2025-05-14 - Batch Log Processing and Terminal Rendering Optimization
+**Learning:** High-frequency log/telemetry data in Blazor Hybrid applications can easily saturate the UI thread if handled on a per-message basis. Rebuilding complex HTML strings or using `MarkupString` for long lists is extremely expensive due to repeated string concatenations and browser re-parsing.
+**Action:** Always use a producer-consumer pattern (via `System.Threading.Channels`) to batch incoming data. Offload heavy processing and File I/O to background tasks, and update the UI at a controlled frequency (e.g., 10Hz). Favor Blazor's native `@foreach` rendering over manual HTML string building to leverage the built-in DOM diffing engine.

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.Logging;
@@ -37,7 +38,14 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     [Parameter]
     public EventCallback<string> OnDisconnected { get; set; }
 
-    private readonly SemaphoreSlim _logLock = new(1, 1);
+    private readonly CancellationTokenSource _componentCts = new();
+
+    private readonly Channel<(string Message, DateTime Timestamp, ShuttleMessageBase? OriginalMsg)> _logChannel =
+        Channel.CreateUnbounded<(string Message, DateTime Timestamp, ShuttleMessageBase? OriginalMsg)>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false,
+        });
 
     private int _shuttleNumberInput = 0;
     private int _moveDistanceBackwardInput = 0;
@@ -49,12 +57,10 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private int _pallentDistance = 0;
     private bool IsAndroid => OperatingSystem.IsAndroid();
 
-    private string _terminalOutputHtml = string.Empty;
     private string _manualCommand = string.Empty;
     private string _componentId = Guid.NewGuid().ToString();
     private bool _isCommandInProgress;
     private int _connectionAttempts = 0;
-    private CancellationTokenSource _componentCts = new();
     private bool _isFullErased = false;
 
     private string CurrentStatus => Shuttle.CurrentStatus;
@@ -64,7 +70,6 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private string BatteryData => $"Батарея: {Shuttle.BatteryVoltage:F1}V | Заряд: {Shuttle.BatteryPercentage}%";
     private bool IsConnected => Shuttle.IsConnected;
     private string ComponentId => _componentId;
-    private string TerminalOutputHtml => _terminalOutputHtml;
     private string ManualCommand { get => _manualCommand; set => _manualCommand = value; }
 
     private string? _selectedFile;
@@ -91,6 +96,9 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             HubClientService.Connected += OnHubConnected;
             HubClientService.Disconnected += OnHubDisconnected;
             HubClientService.LogReceived += OnLogReceived;
+
+            _ = Task.Run(() => ProcessLogsLoopAsync(_componentCts.Token));
+
             Logger.LogInformation("Компонент инициализирован для {IpAddress}", Shuttle.IPAddress);
 
             //StateHasChanged();
@@ -329,12 +337,38 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private void OnLogReceived(string ip, ShuttleMessageBase msg)
     {
-        _ = ProcessLogAsync(ip, msg);
+        if (!IsEventForThisShuttle(ip))
+            return;
+
+        _logChannel.Writer.TryWrite((msg.ToFormattedTerminalString(), DateTime.Now, msg));
     }
 
     private bool isFirstConfig = true;
 
-    private async Task ProcessLogAsync(string ip, ShuttleMessageBase msg)
+    private async Task ProcessLogsLoopAsync(CancellationToken ct)
+    {
+        var batch = new List<(string Message, DateTime Timestamp, ShuttleMessageBase? OriginalMsg)>();
+
+        while (await _logChannel.Reader.WaitToReadAsync(ct))
+        {
+            while (_logChannel.Reader.TryRead(out var item))
+            {
+                batch.Add(item);
+                if (batch.Count >= 100)
+                    break;
+            }
+
+            if (batch.Count > 0)
+            {
+                await ProcessLogBatchAsync(batch);
+                batch.Clear();
+            }
+
+            await Task.Delay(100, ct); // Throttling UI updates to 10Hz max
+        }
+    }
+
+    private async Task ProcessLogBatchAsync(List<(string Message, DateTime Timestamp, ShuttleMessageBase? OriginalMsg)> batch)
     {
         if (isFirstConfig)
         {
@@ -348,43 +382,73 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             isFirstConfig = false;
         }
 
-        if (!IsEventForThisShuttle(ip))
-            return;
+        var ip = Shuttle.IPAddress!;
+        var logLinesByPath = new Dictionary<string, List<string>>();
+        var allLogLines = new List<string>();
 
-        var formattedString = msg.ToFormattedTerminalString();
-        var timestamp = $"[{DateTime.Now:HH:mm:ss}] ";
+        foreach (var item in batch)
+        {
+            var line = $"[{item.Timestamp:HH:mm:ss}] {item.Message}\n";
+            allLogLines.Add(line);
 
-        var typePath = GetLogPath(ip, msg);
-        var allPath = GetAllLogPath(ip);
+            if (item.OriginalMsg != null)
+            {
+                var typePath = GetLogPath(ip, item.OriginalMsg);
+                if (!logLinesByPath.TryGetValue(typePath, out var lines))
+                {
+                    lines = new List<string>();
+                    logLinesByPath[typePath] = lines;
+                }
 
-        await _logLock.WaitAsync();
+                lines.Add(line);
+            }
+        }
+
+        // Batch File I/O
         try
         {
-            var line = $"{timestamp}{formattedString}\n";
-            await File.AppendAllTextAsync(typePath, line);
-            await File.AppendAllTextAsync(allPath, line);
+            var allPath = GetAllLogPath(ip);
+            await File.AppendAllLinesAsync(allPath, allLogLines);
+
+            foreach (var kvp in logLinesByPath)
+            {
+                await File.AppendAllLinesAsync(kvp.Key, kvp.Value);
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            _logLock.Release();
+            Logger.LogError(ex, "Error writing batch logs for {Ip}", ip);
         }
 
+        // Update UI State
         await InvokeAsync(() =>
         {
-            if (msg is TelemetryMessage tm)
-                UpdateTelemetry(tm.Data);
-            else if (msg is SensorMessage sm)
-                UpdateSensors(sm.Data);
-            else if (msg is StatsMessage stm)
-                UpdateStats(stm.Data);
-            else if (msg is ConfigMessage cm)
-                UpdateConfig(cm.Data);
-            else if (msg is FullConfigMessage fcm)
-                UpdateFullConfig(fcm.Data);
-
-            if (msg is RawLogMessage or AckMessage or ConfigMessage)
+            foreach (var item in batch)
             {
-                LogToTerminal($"{timestamp}{formattedString}\n");
+                var msg = item.OriginalMsg;
+                if (msg != null)
+                {
+                    if (msg is TelemetryMessage tm)
+                        UpdateTelemetry(tm.Data);
+                    else if (msg is SensorMessage sm)
+                        UpdateSensors(sm.Data);
+                    else if (msg is StatsMessage stm)
+                        UpdateStats(stm.Data);
+                    else if (msg is ConfigMessage cm)
+                        UpdateConfig(cm.Data);
+                    else if (msg is FullConfigMessage fcm)
+                        UpdateFullConfig(fcm.Data);
+
+                    if (msg is RawLogMessage or AckMessage or ConfigMessage)
+                    {
+                        LogToTerminalInternal($"[{item.Timestamp:HH:mm:ss}] {item.Message}\n");
+                    }
+                }
+                else
+                {
+                    // Manual messages (LogToTerminal)
+                    LogToTerminalInternal(item.Message);
+                }
             }
 
             StateHasChanged();
@@ -802,14 +866,16 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private void ClearTerminal()
     {
         Shuttle.ClearTerminalMessage();
-        _terminalOutputHtml = string.Empty;
         StateHasChanged();
     }
 
     private void LogToTerminal(string message)
     {
-        var lines = message.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
+        _logChannel.Writer.TryWrite((message, DateTime.Now, null));
+    }
 
+    private void LogToTerminalInternal(string message)
+    {
         Shuttle.AddTerminalMessage(message);
 
         if (Shuttle.GetTerminalMessages().Count > 1000)
@@ -817,12 +883,6 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             Shuttle.RemoveTerminalMessage();
         }
 
-        _terminalOutputHtml = string.Join(
-            string.Empty,
-            Shuttle.GetTerminalMessages().Select(line =>
-                $"<div class=\"terminal-line\">{System.Net.WebUtility.HtmlEncode(line)}</div>"));
-
-        //StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }
 
