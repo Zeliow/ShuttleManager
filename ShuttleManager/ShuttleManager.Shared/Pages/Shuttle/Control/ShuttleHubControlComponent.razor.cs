@@ -49,7 +49,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private int _pallentDistance = 0;
     private static bool IsAndroid => OperatingSystem.IsAndroid();
 
-    private readonly Channel<string> _logChannel = Channel.CreateUnbounded<string>();
+    private readonly Channel<(string Log, DateTime Timestamp)> _logChannel = Channel.CreateUnbounded<(string Log, DateTime Timestamp)>();
     private readonly List<string> _statusBlockLines = new();
 
     private string _manualCommand = string.Empty;
@@ -489,31 +489,51 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
-        _logChannel.Writer.TryWrite(log);
+        _logChannel.Writer.TryWrite((log, DateTime.Now));
     }
 
     private async Task ProcessLogsLoopAsync()
     {
         try
         {
+            var batch = new List<(string Log, DateTime Timestamp)>();
             while (!_componentCts.Token.IsCancellationRequested)
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
+                    batch.Clear();
+                    while (_logChannel.Reader.TryRead(out var item))
+                    {
+                        batch.Add(item);
+                        if (batch.Count >= 100) break;
+                    }
+
+                    if (batch.Count == 0) continue;
+
+                    // 1. Asynchronous batched file logging (offload to background)
+                    var fileLines = batch.Select(b => $"[{b.Timestamp}] {b.Log}");
+                    try
+                    {
+                        await File.AppendAllLinesAsync(pathLogShuttle, fileLines, _componentCts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to write logs to file for {Ip}", Shuttle.IPAddress);
+                    }
+
+                    // 2. Batch UI updates and parsing
                     bool stateChanged = false;
+                    var terminalBatch = new List<string>();
+
                     await InvokeAsync(() =>
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
+                        foreach (var item in batch)
                         {
+                            var log = item.Log;
+                            var timestamp = item.Timestamp;
+
                             ParseAndHandleResponse(log);
+
                             if (log.StartsWith("-----------------------------------------------"))
                             {
                                 if (!_inStatusBlock)
@@ -534,15 +554,20 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
 
                             if (log.Contains("##HEARTBEAT##"))
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                terminalBatch.Add($"[HEARTBEAT] {log}\n");
                             }
                             else
                             {
                                 var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                terminalBatch.Add($"[{timestamp:HH:mm:ss}] {cleanLog}\n");
                             }
 
                             stateChanged = true;
+                        }
+
+                        if (terminalBatch.Count > 0)
+                        {
+                            Shuttle.AddRangeTerminalMessages(terminalBatch);
                         }
 
                         if (stateChanged)
@@ -556,6 +581,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                         _ = ScrollTerminalToBottomAsync();
                     }
 
+                    // Throttle high-frequency updates to keep UI responsive
                     await Task.Delay(100, _componentCts.Token);
                 }
             }
@@ -566,16 +592,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Ошибка в цикле обработки логов");
-        }
-    }
-
-    private void LogToTerminalInternal(string message)
-    {
-        Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
         }
     }
 
@@ -808,12 +824,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
-
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }
