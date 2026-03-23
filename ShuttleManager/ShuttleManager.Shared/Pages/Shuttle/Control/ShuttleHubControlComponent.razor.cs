@@ -37,7 +37,10 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     [Parameter]
     public EventCallback<string> OnDisconnected { get; set; }
 
-    private string[] shuttleNums = { "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32" };
+    private readonly Channel<(string Message, DateTime Timestamp)> _logChannel = Channel.CreateUnbounded<(string, DateTime)>();
+    private readonly List<string> _statusBlockLines = new();
+    private readonly string _componentId = Guid.NewGuid().ToString();
+    private readonly string[] shuttleNums = { "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32" };
 
     private int _shuttleNumberInput = 1;
     private int _moveDistanceBackwardInput = 0;
@@ -47,13 +50,12 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private int _maxSpeedInput = 0;
     private int _minPowerInput = 0;
     private int _pallentDistance = 0;
-    private static bool IsAndroid => OperatingSystem.IsAndroid();
-
-    private readonly Channel<string> _logChannel = Channel.CreateUnbounded<string>();
-    private readonly List<string> _statusBlockLines = new();
-
     private string _manualCommand = string.Empty;
-    private string _componentId = Guid.NewGuid().ToString();
+    private string pathLogShuttle = string.Empty;
+    private string? _selectedFile;
+    private string _otaStatus = string.Empty;
+
+    private static bool IsAndroid => OperatingSystem.IsAndroid();
     private bool _isCommandInProgress;
     private int _connectionAttempts = 0;
     private CancellationTokenSource _componentCts = new();
@@ -67,16 +69,12 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private bool IsConnected => Shuttle.IsConnected;
     private string ComponentId => _componentId;
     private string ManualCommand { get => _manualCommand; set => _manualCommand = value; }
-    private string pathLogShuttle = string.Empty;
 
     private bool _inStatusBlock = false;
 
     //Ota Update
-    private string? _selectedFile;
-
     private int _otaPercent;
     private bool _isOtaRunning;
-    private string _otaStatus = string.Empty;
     private CancellationTokenSource? _otaCts;
 
     [GeneratedRegex(@"^CB\s+(\d+)$")]
@@ -489,15 +487,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
-        _logChannel.Writer.TryWrite(log);
+        // Strictly non-blocking: just write to the channel with the current timestamp.
+        // File I/O is offloaded to the background processing loop.
+        _logChannel.Writer.TryWrite((log, DateTime.Now));
     }
 
     private async Task ProcessLogsLoopAsync()
@@ -508,54 +500,71 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
-                    await InvokeAsync(() =>
+                    var batch = new List<(string Message, DateTime Timestamp)>();
+                    while (batch.Count < 100 && _logChannel.Reader.TryRead(out var item))
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
-                        {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
-                            {
-                                if (!_inStatusBlock)
-                                {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
-                                }
-                                else
-                                {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                                }
-                            }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
+                        batch.Add(item);
+                    }
 
-                            if (log.Contains("##HEARTBEAT##"))
+                    if (batch.Count == 0)
+                        continue;
+
+                    // 1. Background File Logging (sequential and non-blocking for UI)
+                    try
+                    {
+                        var logLines = batch.Select(b => $"[{b.Timestamp}] {b.Message}");
+                        await File.AppendAllLinesAsync(pathLogShuttle, logLines, _componentCts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to write logs to file for {IP}", Shuttle.IPAddress);
+                    }
+
+                    // 2. Process logic outside UI thread
+                    var terminalBatch = new List<string>();
+                    foreach (var (log, timestamp) in batch)
+                    {
+                        ParseAndHandleResponse(log);
+
+                        if (log.StartsWith("-----------------------------------------------"))
+                        {
+                            if (!_inStatusBlock)
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                _inStatusBlock = true;
+                                _statusBlockLines.Clear();
                             }
                             else
                             {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                _inStatusBlock = false;
+                                Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
                             }
-
-                            stateChanged = true;
                         }
-
-                        if (stateChanged)
+                        else if (_inStatusBlock)
                         {
-                            StateHasChanged();
+                            _statusBlockLines.Add(log);
                         }
-                    });
 
-                    if (stateChanged)
-                    {
-                        _ = ScrollTerminalToBottomAsync();
+                        if (log.Contains("##HEARTBEAT##"))
+                        {
+                            terminalBatch.Add($"[HEARTBEAT] {log}\n");
+                        }
+                        else
+                        {
+                            var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
+                            terminalBatch.Add($"[{timestamp:HH:mm:ss}] {cleanLog}\n");
+                        }
                     }
 
+                    // 3. Update UI state once per batch
+                    await InvokeAsync(() =>
+                    {
+                        Shuttle.AddRangeTerminalMessages(terminalBatch);
+                        StateHasChanged();
+                    });
+
+                    _ = ScrollTerminalToBottomAsync();
+
+                    // Small delay to prevent UI thread saturation during intense log streams
                     await Task.Delay(100, _componentCts.Token);
                 }
             }
@@ -565,18 +574,15 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Ошибка в цикле обработки логов");
+            Logger.LogError(ex, "Error in log processing loop for {IP}", Shuttle.IPAddress);
         }
     }
 
     private void LogToTerminalInternal(string message)
     {
+        // This method is now effectively replaced by the batched logic in ProcessLogsLoopAsync,
+        // but kept for direct calls if any remain.
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
     }
 
     private async Task SendCommandAsync(string command, string description = "")
@@ -808,11 +814,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
 
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
