@@ -48,11 +48,27 @@ public class Shuttle
     public string FullStatusBlock { get; set; } = string.Empty;
     private List<string> _terminalMessages = [];
 
+    /// <summary>
+    /// Adds a single message to the terminal log and prunes if necessary.
+    /// </summary>
     public void AddTerminalMessage(string message)
     {
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            PruneMessagesInternal();
+        }
+    }
+
+    /// <summary>
+    /// Adds a collection of messages to the terminal log in a single batch and prunes if necessary.
+    /// </summary>
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            PruneMessagesInternal();
         }
     }
 
@@ -64,9 +80,10 @@ public class Shuttle
         }
     }
 
-    public void RemoveTerminalMessage()
+    private void PruneMessagesInternal()
     {
-        lock (_lock)
+        // Limit to 900 messages, prune down to 500 when exceeded.
+        if (_terminalMessages.Count > 900)
         {
             _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
         }

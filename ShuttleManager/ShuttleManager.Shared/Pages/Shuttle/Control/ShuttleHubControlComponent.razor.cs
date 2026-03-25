@@ -49,7 +49,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private int _pallentDistance = 0;
     private static bool IsAndroid => OperatingSystem.IsAndroid();
 
-    private readonly Channel<string> _logChannel = Channel.CreateUnbounded<string>();
+    private readonly Channel<(string Message, DateTime Timestamp)> _logChannel = Channel.CreateUnbounded<(string Message, DateTime Timestamp)>();
     private readonly List<string> _statusBlockLines = new();
 
     private string _manualCommand = string.Empty;
@@ -390,12 +390,12 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
             var match = PltDistRegex().Match(line);
             if (match.Success)
             {
-                if (int.TryParse(match.Groups[1].Value, out int forwardPalletDist) &&
-                    int.TryParse(match.Groups[2].Value, out int reversePalletDist))
+                if (int.TryParse(match.Groups[1].Value, out int forwardPalletDistance) &&
+                    int.TryParse(match.Groups[2].Value, out int reversePalletDistance))
                 {
-                    Shuttle.ForwardPalletDistance = forwardPalletDist;
-                    Shuttle.ReversePalletDistance = reversePalletDist;
-                    Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDist}/{reversePalletDist}");
+                    Shuttle.ForwardPalletDistance = forwardPalletDistance;
+                    Shuttle.ReversePalletDistance = reversePalletDistance;
+                    Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDistance}/{reversePalletDistance}");
                 }
             }
         }
@@ -489,70 +489,80 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
-        _logChannel.Writer.TryWrite(log);
+        _logChannel.Writer.TryWrite((log, DateTime.Now));
     }
 
     private async Task ProcessLogsLoopAsync()
     {
+        var fileLogsBuffer = new List<string>();
+        var terminalLogsBuffer = new List<string>();
+
         try
         {
             while (!_componentCts.Token.IsCancellationRequested)
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
-                    await InvokeAsync(() =>
-                    {
-                        while (_logChannel.Reader.TryRead(out var log))
-                        {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
-                            {
-                                if (!_inStatusBlock)
-                                {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
-                                }
-                                else
-                                {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                                }
-                            }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
+                    fileLogsBuffer.Clear();
+                    terminalLogsBuffer.Clear();
 
-                            if (log.Contains("##HEARTBEAT##"))
+                    while (_logChannel.Reader.TryRead(out var logItem))
+                    {
+                        var (log, timestamp) = logItem;
+
+                        // Process telemetry and status blocks on background thread
+                        ParseAndHandleResponse(log);
+
+                        if (log.StartsWith("-----------------------------------------------"))
+                        {
+                            if (!_inStatusBlock)
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                _inStatusBlock = true;
+                                _statusBlockLines.Clear();
                             }
                             else
                             {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                _inStatusBlock = false;
+                                Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
                             }
-
-                            stateChanged = true;
                         }
-
-                        if (stateChanged)
+                        else if (_inStatusBlock)
                         {
-                            StateHasChanged();
+                            _statusBlockLines.Add(log);
                         }
-                    });
 
-                    if (stateChanged)
+                        // Prepare terminal messages
+                        if (log.Contains("##HEARTBEAT##"))
+                        {
+                            terminalLogsBuffer.Add($"[HEARTBEAT] {log}\n");
+                        }
+                        else
+                        {
+                            var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
+                            terminalLogsBuffer.Add($"[{timestamp:HH:mm:ss}] {cleanLog}\n");
+                        }
+
+                        // Prepare file log lines
+                        fileLogsBuffer.Add($"[{timestamp}] {log}");
+                    }
+
+                    if (fileLogsBuffer.Count > 0)
                     {
+                        // Background file I/O
+                        try
+                        {
+                            await File.AppendAllLinesAsync(pathLogShuttle, fileLogsBuffer, _componentCts.Token);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogWarning(ex, "Failed to write logs to file {Path}", pathLogShuttle);
+                        }
+
+                        // Update terminal message collection in bulk
+                        Shuttle.AddRangeTerminalMessages(terminalLogsBuffer);
+
+                        // Single UI update per batch
+                        await InvokeAsync(StateHasChanged);
                         _ = ScrollTerminalToBottomAsync();
                     }
 
@@ -566,16 +576,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Ошибка в цикле обработки логов");
-        }
-    }
-
-    private void LogToTerminalInternal(string message)
-    {
-        Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
         }
     }
 
@@ -808,12 +808,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
-
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }
