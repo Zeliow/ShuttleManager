@@ -489,14 +489,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
+        // Offload log persistence to the background loop via the channel to avoid blocking the network thread
         _logChannel.Writer.TryWrite(log);
     }
 
@@ -509,47 +502,66 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
                     bool stateChanged = false;
-                    await InvokeAsync(() =>
+                    var logBatch = new List<string>();
+
+                    while (_logChannel.Reader.TryRead(out var log))
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
+                        logBatch.Add(log);
+                    }
+
+                    if (logBatch.Count > 0)
+                    {
+                        // Background file logging
+                        var fileLines = logBatch.Select(log => $"[{DateTime.Now}] {log}");
+                        try
                         {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
+                            await File.AppendAllLinesAsync(pathLogShuttle, fileLines, _componentCts.Token);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogWarning(ex, "Failed to write logs to file for {IpAddress}", Shuttle.IPAddress);
+                        }
+
+                        // UI and Model updates
+                        await InvokeAsync(() =>
+                        {
+                            foreach (var log in logBatch)
                             {
-                                if (!_inStatusBlock)
+                                ParseAndHandleResponse(log);
+                                if (log.StartsWith("-----------------------------------------------"))
                                 {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
+                                    if (!_inStatusBlock)
+                                    {
+                                        _inStatusBlock = true;
+                                        _statusBlockLines.Clear();
+                                    }
+                                    else
+                                    {
+                                        _inStatusBlock = false;
+                                        Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
+                                    }
+                                }
+                                else if (_inStatusBlock)
+                                {
+                                    _statusBlockLines.Add(log);
+                                }
+
+                                if (log.Contains("##HEARTBEAT##"))
+                                {
+                                    LogToTerminalInternal($"[HEARTBEAT] {log}\n");
                                 }
                                 else
                                 {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
+                                    var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
+                                    LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
                                 }
                             }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
 
-                            if (log.Contains("##HEARTBEAT##"))
-                            {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
-                            }
-                            else
-                            {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
-                            }
-
-                            stateChanged = true;
-                        }
-
-                        if (stateChanged)
-                        {
                             StateHasChanged();
-                        }
-                    });
+                        });
+
+                        stateChanged = true;
+                    }
 
                     if (stateChanged)
                     {
