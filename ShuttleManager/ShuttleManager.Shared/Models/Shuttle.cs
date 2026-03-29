@@ -48,11 +48,27 @@ public class Shuttle
     public string FullStatusBlock { get; set; } = string.Empty;
     private List<string> _terminalMessages = [];
 
+    /// <summary>
+    /// Adds a single terminal message and enforces the 900-line limit.
+    /// </summary>
     public void AddTerminalMessage(string message)
     {
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            EnforceLimit();
+        }
+    }
+
+    /// <summary>
+    /// Adds multiple terminal messages in a single lock and enforces the 900-line limit.
+    /// </summary>
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            EnforceLimit();
         }
     }
 
@@ -64,22 +80,12 @@ public class Shuttle
         }
     }
 
-    public void RemoveTerminalMessage()
+    private void EnforceLimit()
     {
-        lock (_lock)
+        // Check if messages exceed the 900-line limit and truncate to 500 to reduce lock contention
+        if (_terminalMessages.Count > 900)
         {
             _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
-        }
-    }
-
-    public int TerminalMessageCount
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _terminalMessages.Count;
-            }
         }
     }
 
