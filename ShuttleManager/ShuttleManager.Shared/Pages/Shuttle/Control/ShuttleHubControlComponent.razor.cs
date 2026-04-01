@@ -489,14 +489,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
+        // Optimized: Only write to the channel here. File I/O is offloaded to the background loop.
         _logChannel.Writer.TryWrite(log);
     }
 
@@ -504,55 +497,82 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     {
         try
         {
+            var logBatch = new List<string>();
+            var terminalBatch = new List<string>();
+            var fileBatch = new List<string>();
+
             while (!_componentCts.Token.IsCancellationRequested)
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
-                    await InvokeAsync(() =>
+                    logBatch.Clear();
+                    terminalBatch.Clear();
+                    fileBatch.Clear();
+
+                    // ⚡ Bolt: Drain all available logs to process in a single batch
+                    while (_logChannel.Reader.TryRead(out var log))
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
+                        logBatch.Add(log);
+
+                        // Prepare file log line
+                        fileBatch.Add($"[{DateTime.Now}] {log}");
+
+                        // Prepare terminal message
+                        if (log.Contains("##HEARTBEAT##"))
                         {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
-                            {
-                                if (!_inStatusBlock)
-                                {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
-                                }
-                                else
-                                {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                                }
-                            }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
+                            terminalBatch.Add($"[HEARTBEAT] {log}\n");
+                        }
+                        else
+                        {
+                            var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
+                            terminalBatch.Add($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                        }
+                    }
 
-                            if (log.Contains("##HEARTBEAT##"))
-                            {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
-                            }
-                            else
-                            {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
-                            }
-
-                            stateChanged = true;
+                    if (logBatch.Count > 0)
+                    {
+                        // ⚡ Bolt: Offload file I/O to background and process in batch
+                        try
+                        {
+                            await File.AppendAllLinesAsync(pathLogShuttle, fileBatch, _componentCts.Token);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogWarning(ex, "Error writing logs to file");
                         }
 
-                        if (stateChanged)
+                        // ⚡ Bolt: Single InvokeAsync block per batch to minimize UI thread context switching
+                        await InvokeAsync(() =>
                         {
+                            foreach (var log in logBatch)
+                            {
+                                ParseAndHandleResponse(log);
+
+                                if (log.StartsWith("-----------------------------------------------"))
+                                {
+                                    if (!_inStatusBlock)
+                                    {
+                                        _inStatusBlock = true;
+                                        _statusBlockLines.Clear();
+                                    }
+                                    else
+                                    {
+                                        _inStatusBlock = false;
+                                        Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
+                                    }
+                                }
+                                else if (_inStatusBlock)
+                                {
+                                    _statusBlockLines.Add(log);
+                                }
+                            }
+
+                            // ⚡ Bolt: Batch terminal update using the new optimized method
+                            Shuttle.AddRangeTerminalMessages(terminalBatch);
+
                             StateHasChanged();
-                        }
-                    });
+                        });
 
-                    if (stateChanged)
-                    {
                         _ = ScrollTerminalToBottomAsync();
                     }
 
@@ -572,11 +592,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminalInternal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
     }
 
     private async Task SendCommandAsync(string command, string description = "")
@@ -808,11 +823,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
 
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
