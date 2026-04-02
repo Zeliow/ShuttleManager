@@ -47,40 +47,37 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
     {
         var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        var ipRange = Enumerable.Range(_startRange, _endRange - _startRange + 1);
 
-        //перебор подсети
-        for (int i = _startRange; i <= _endRange; i++)
+        // Scan subnet with controlled concurrency
+        await Parallel.ForEachAsync(ipRange, new ParallelOptions { MaxDegreeOfParallelism = 32 }, async (i, token) =>
         {
-            string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            var ip = IPAddress.Parse($"{baseIp}.{i}");
+            try
             {
+                using var client = new TcpClient();
+                using var cts = new CancellationTokenSource(timeoutMs);
                 try
                 {
-                    using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
+                    await client.ConnectAsync(ip, port, cts.Token);
+                    if (client.Connected)
                     {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
+                        Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
+                        lock (foundDevices)
                         {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
+                            foundDevices.Add(ip);
                         }
                     }
-                    catch (OperationCanceledException)
-                    {
-                    }
                 }
-                catch (SocketException)
+                catch (OperationCanceledException)
                 {
                 }
-            });
-            tasks.Add(task);
-        }
+            }
+            catch (SocketException)
+            {
+            }
+        });
 
-        await Task.WhenAll(tasks);
         return foundDevices;
     }
 
