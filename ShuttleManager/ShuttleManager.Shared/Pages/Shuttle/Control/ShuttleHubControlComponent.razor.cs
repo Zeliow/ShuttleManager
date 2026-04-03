@@ -49,7 +49,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private int _pallentDistance = 0;
     private static bool IsAndroid => OperatingSystem.IsAndroid();
 
-    private readonly Channel<string> _logChannel = Channel.CreateUnbounded<string>();
+    private readonly Channel<(string Message, DateTime Timestamp)> _logChannel = Channel.CreateUnbounded<(string Message, DateTime Timestamp)>();
     private readonly List<string> _statusBlockLines = new();
 
     private string _manualCommand = string.Empty;
@@ -257,10 +257,11 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
 
     private void ParseAndHandleResponse(string response)
     {
-        var line = response.Trim();
+        var lineSpan = response.AsSpan().Trim();
 
-        if (line.StartsWith("CB"))
+        if (lineSpan.StartsWith("CB"))
         {
+            var line = response.Trim();
             var match = CbRegex().Match(line);
             if (match.Success && int.TryParse(match.Groups[1].Value, out int batteryPercentageScr))
             {
@@ -268,8 +269,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed CB: Battery {batteryPercentageScr}%");
             }
         }
-        else if (line.StartsWith("Batt"))
+        else if (lineSpan.StartsWith("Batt"))
         {
+            var line = response.Trim();
             var match = BattRegex().Match(line);
             if (match.Success)
             {
@@ -284,8 +286,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Inverse"))
+        else if (lineSpan.StartsWith("Inverse"))
         {
+            var line = response.Trim();
             var match = InverseRegex().Match(line);
             if (match.Success)
             {
@@ -293,8 +296,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed Inverse: {Shuttle.Inverse}");
             }
         }
-        else if (line.StartsWith("Status"))
+        else if (lineSpan.StartsWith("Status"))
         {
+            var line = response.Trim();
             var match = StatusRegex().Match(line);
             if (match.Success)
             {
@@ -307,8 +311,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed Status: {Shuttle.CurrentStatus} ({Shuttle.StatusCode})");
             }
         }
-        else if (line.StartsWith("MPR"))
+        else if (lineSpan.StartsWith("MPR"))
         {
+            var line = response.Trim();
             var match = MprRegex().Match(line);
             if (match.Success)
             {
@@ -321,8 +326,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Shuttle number"))
+        else if (lineSpan.StartsWith("Shuttle number"))
         {
+            var line = response.Trim();
             var match = ShuttleInfoRegex().Match(line);
             if (match.Success)
             {
@@ -334,8 +340,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Temperature"))
+        else if (lineSpan.StartsWith("Temperature"))
         {
+            var line = response.Trim();
             var match = TempRegex().Match(line);
             if (match.Success)
             {
@@ -346,8 +353,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Angle"))
+        else if (lineSpan.StartsWith("Angle"))
         {
+            var line = response.Trim();
             var match = AngleRegex().Match(line);
             if (match.Success)
             {
@@ -362,8 +370,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("FIFO_LIFO"))
+        else if (lineSpan.StartsWith("FIFO_LIFO"))
         {
+            var line = response.Trim();
             var match = FifoLifoRegex().Match(line);
             if (match.Success)
             {
@@ -371,8 +380,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed FIFO/LIFO: {Shuttle.FifoLifoMode}");
             }
         }
-        else if (line.StartsWith("Forwrd dist"))
+        else if (lineSpan.StartsWith("Forwrd dist"))
         {
+            var line = response.Trim();
             var match = DistRegex().Match(line);
             if (match.Success)
             {
@@ -385,22 +395,24 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Forwrd plt dist"))
+        else if (lineSpan.StartsWith("Forwrd plt dist"))
         {
+            var line = response.Trim();
             var match = PltDistRegex().Match(line);
             if (match.Success)
             {
-                if (int.TryParse(match.Groups[1].Value, out int forwardPalletDist) &&
-                    int.TryParse(match.Groups[2].Value, out int reversePalletDist))
+                if (int.TryParse(match.Groups[1].Value, out int forwardPalletDistance) &&
+                    int.TryParse(match.Groups[2].Value, out int reversePalletDistance))
                 {
-                    Shuttle.ForwardPalletDistance = forwardPalletDist;
-                    Shuttle.ReversePalletDistance = reversePalletDist;
-                    Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDist}/{reversePalletDist}");
+                    Shuttle.ForwardPalletDistance = forwardPalletDistance;
+                    Shuttle.ReversePalletDistance = reversePalletDistance;
+                    Logger.LogInformation($"Parsed Pallet Dist F/R: {forwardPalletDistance}/{reversePalletDistance}");
                 }
             }
         }
-        else if (line.StartsWith("Plt dtchk"))
+        else if (lineSpan.StartsWith("Plt dtchk"))
         {
+            var line = response.Trim();
             var match = PltDetRegex().Match(line);
             if (match.Success)
             {
@@ -423,8 +435,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("In channel"))
+        else if (lineSpan.StartsWith("In channel"))
         {
+            var line = response.Trim();
             var match = InChanRegex().Match(line);
             if (match.Success)
             {
@@ -432,8 +445,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed In Channel: {Shuttle.IsInChannel}");
             }
         }
-        else if (line.StartsWith("Lifter"))
+        else if (lineSpan.StartsWith("Lifter"))
         {
+            var line = response.Trim();
             var match = LifterRegex().Match(line);
             if (match.Success)
             {
@@ -442,8 +456,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 Logger.LogInformation($"Parsed Lifter: UP={Shuttle.IsLifterUp}, DOWN={Shuttle.IsLifterDown}");
             }
         }
-        else if (line.StartsWith("Bumper"))
+        else if (lineSpan.StartsWith("Bumper"))
         {
+            var line = response.Trim();
             var match = BumperRegex().Match(line);
             if (match.Success)
             {
@@ -456,8 +471,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Zero point MPR"))
+        else if (lineSpan.StartsWith("Zero point MPR"))
         {
+            var line = response.Trim();
             var match = ZeroOffRegex().Match(line);
             if (match.Success)
             {
@@ -470,8 +486,9 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                 }
             }
         }
-        else if (line.StartsWith("Wait time on unload"))
+        else if (lineSpan.StartsWith("Wait time on unload"))
         {
+            var line = response.Trim();
             var match = WaitTimeRegex().Match(line);
             if (match.Success)
             {
@@ -489,15 +506,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
-        _logChannel.Writer.TryWrite(log);
+        _logChannel.Writer.TryWrite((log, DateTime.Now));
     }
 
     private async Task ProcessLogsLoopAsync()
@@ -508,52 +517,70 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
-                    await InvokeAsync(() =>
-                    {
-                        while (_logChannel.Reader.TryRead(out var log))
-                        {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
-                            {
-                                if (!_inStatusBlock)
-                                {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
-                                }
-                                else
-                                {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                                }
-                            }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
+                    var batchTerminalMessages = new List<string>();
+                    var batchFileLines = new List<string>();
 
-                            if (log.Contains("##HEARTBEAT##"))
+                    while (_logChannel.Reader.TryRead(out var item))
+                    {
+                        var (log, timestamp) = item;
+
+                        batchFileLines.Add($"[{timestamp}] {log}");
+
+                        // Parse status and telemetry patterns
+                        this.ParseAndHandleResponse(log);
+
+                        if (log.StartsWith("-----------------------------------------------"))
+                        {
+                            if (!_inStatusBlock)
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                _inStatusBlock = true;
+                                _statusBlockLines.Clear();
                             }
                             else
                             {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                _inStatusBlock = false;
+                                Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
                             }
-
-                            stateChanged = true;
                         }
-
-                        if (stateChanged)
+                        else if (_inStatusBlock)
                         {
-                            StateHasChanged();
+                            _statusBlockLines.Add(log);
                         }
-                    });
 
-                    if (stateChanged)
+                        // Format for terminal
+                        if (log.Contains("##HEARTBEAT##"))
+                        {
+                            batchTerminalMessages.Add($"[HEARTBEAT] {log}\n");
+                        }
+                        else
+                        {
+                            var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
+                            batchTerminalMessages.Add($"[{timestamp:HH:mm:ss}] {cleanLog}\n");
+                        }
+                    }
+
+                    if (batchFileLines.Count > 0)
                     {
-                        _ = ScrollTerminalToBottomAsync();
+                        try
+                        {
+                            await File.AppendAllLinesAsync(this.pathLogShuttle, batchFileLines, _componentCts.Token);
+                        }
+                        catch
+                        {
+                            // Silent fail for logging errors
+                        }
+                    }
+
+                    if (batchTerminalMessages.Count > 0)
+                    {
+                        Shuttle.AddRangeTerminalMessages(batchTerminalMessages);
+
+                        await this.InvokeAsync(() =>
+                        {
+                            this.StateHasChanged();
+                        });
+
+                        _ = this.ScrollTerminalToBottomAsync();
                     }
 
                     await Task.Delay(100, _componentCts.Token);
@@ -566,16 +593,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Ошибка в цикле обработки логов");
-        }
-    }
-
-    private void LogToTerminalInternal(string message)
-    {
-        Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
         }
     }
 

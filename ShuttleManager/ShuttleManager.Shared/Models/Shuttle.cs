@@ -53,6 +53,16 @@ public class Shuttle
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            this.TruncateMessages();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            this.TruncateMessages();
         }
     }
 
@@ -67,6 +77,14 @@ public class Shuttle
     public void RemoveTerminalMessage()
     {
         lock (_lock)
+        {
+            this.TruncateMessages();
+        }
+    }
+
+    private void TruncateMessages()
+    {
+        if (_terminalMessages.Count > 900)
         {
             _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
         }
@@ -83,7 +101,7 @@ public class Shuttle
         }
     }
 
-    public IReadOnlyList<string> GetTerminalMessages()
+    public ICollection<string> GetTerminalMessages()
     {
         lock (_lock)
         {
