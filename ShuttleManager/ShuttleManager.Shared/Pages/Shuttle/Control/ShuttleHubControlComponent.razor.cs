@@ -489,14 +489,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
         _logChannel.Writer.TryWrite(log);
     }
 
@@ -504,55 +496,75 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     {
         try
         {
+            var batchLogs = new List<string>();
+            var terminalBatch = new List<string>();
+            var fileLogs = new List<string>();
+
             while (!_componentCts.Token.IsCancellationRequested)
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
-                    await InvokeAsync(() =>
-                    {
-                        while (_logChannel.Reader.TryRead(out var log))
-                        {
-                            ParseAndHandleResponse(log);
-                            if (log.StartsWith("-----------------------------------------------"))
-                            {
-                                if (!_inStatusBlock)
-                                {
-                                    _inStatusBlock = true;
-                                    _statusBlockLines.Clear();
-                                }
-                                else
-                                {
-                                    _inStatusBlock = false;
-                                    Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
-                                }
-                            }
-                            else if (_inStatusBlock)
-                            {
-                                _statusBlockLines.Add(log);
-                            }
+                    batchLogs.Clear();
+                    terminalBatch.Clear();
+                    fileLogs.Clear();
 
-                            if (log.Contains("##HEARTBEAT##"))
+                    while (_logChannel.Reader.TryRead(out var log))
+                    {
+                        batchLogs.Add(log);
+                        fileLogs.Add($"[{DateTime.Now}] {log}");
+
+                        // Process parsing outside UI thread
+                        ParseAndHandleResponse(log);
+                        if (log.StartsWith("-----------------------------------------------"))
+                        {
+                            if (!_inStatusBlock)
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                _inStatusBlock = true;
+                                _statusBlockLines.Clear();
                             }
                             else
                             {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                _inStatusBlock = false;
+                                Shuttle.FullStatusBlock = string.Join("\n", _statusBlockLines);
                             }
-
-                            stateChanged = true;
                         }
-
-                        if (stateChanged)
+                        else if (_inStatusBlock)
                         {
-                            StateHasChanged();
+                            _statusBlockLines.Add(log);
                         }
-                    });
 
-                    if (stateChanged)
+                        if (log.Contains("##HEARTBEAT##"))
+                        {
+                            terminalBatch.Add($"[HEARTBEAT] {log}\n");
+                        }
+                        else
+                        {
+                            var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
+                            terminalBatch.Add($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                        }
+                    }
+
+                    // Async file I/O outside UI thread
+                    if (fileLogs.Count > 0)
                     {
+                        try
+                        {
+                            await File.AppendAllLinesAsync(pathLogShuttle, fileLogs, _componentCts.Token);
+                        }
+                        catch
+                        {
+                            // Silent catch for I/O errors in background loop
+                        }
+                    }
+
+                    if (batchLogs.Count > 0)
+                    {
+                        await InvokeAsync(() =>
+                        {
+                            Shuttle.AddRangeTerminalMessages(terminalBatch);
+                            StateHasChanged();
+                        });
+
                         _ = ScrollTerminalToBottomAsync();
                     }
 
@@ -569,15 +581,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         }
     }
 
-    private void LogToTerminalInternal(string message)
-    {
-        Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
-    }
 
     private async Task SendCommandAsync(string command, string description = "")
     {
@@ -808,12 +811,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
-
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }
