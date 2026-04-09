@@ -47,40 +47,49 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
     {
         var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        var ips = Enumerable.Range(_startRange, _endRange - _startRange + 1).Select(i => $"{baseIp}.{i}");
 
-        //перебор подсети
-        for (int i = _startRange; i <= _endRange; i++)
+        var options = new ParallelOptions
         {
-            string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            MaxDegreeOfParallelism = 32,
+        };
+
+        // Optimization: Use Parallel.ForEachAsync to control concurrency (MaxDegreeOfParallelism = 32).
+        // This prevents thread pool exhaustion and socket overhead compared to unbounded Task.Run.
+        await Parallel.ForEachAsync(ips, options, async (ip, ct) =>
+        {
+            try
             {
+                var address = IPAddress.Parse(ip);
+                using var client = new TcpClient();
+                using var timeoutCts = new CancellationTokenSource(timeoutMs);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
                 try
                 {
-                    using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
+                    await client.ConnectAsync(address, port, linkedCts.Token);
+                    if (client.Connected)
                     {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
+                        Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
+                        lock (foundDevices)
                         {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
+                            foundDevices.Add(address);
                         }
                     }
-                    catch (OperationCanceledException)
-                    {
-                    }
+                }
+                catch (OperationCanceledException)
+                {
                 }
                 catch (SocketException)
                 {
                 }
-            });
-            tasks.Add(task);
-        }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ShuttleHubClientService] Unexpected error scanning {ip}: {ex.Message}");
+            }
+        });
 
-        await Task.WhenAll(tasks);
         return foundDevices;
     }
 
