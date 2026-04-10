@@ -47,40 +47,41 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
     {
         var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        var ips = Enumerable.Range(_startRange, _endRange - _startRange + 1)
+                            .Select(i => $"{baseIp}.{i}");
 
-        //перебор подсети
-        for (int i = _startRange; i <= _endRange; i++)
+        var options = new ParallelOptions { MaxDegreeOfParallelism = 32 };
+
+        // Optimized network scan using Parallel.ForEachAsync to control concurrency and ensure proper resource disposal.
+        await Parallel.ForEachAsync(ips, options, async (ipString, token) =>
         {
-            string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            if (!IPAddress.TryParse(ipString, out var ip))
             {
-                try
-                {
-                    using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
-                    {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
-                        {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                    }
-                }
-                catch (SocketException)
-                {
-                }
-            });
-            tasks.Add(task);
-        }
+                return;
+            }
 
-        await Task.WhenAll(tasks);
+            try
+            {
+                using var client = new TcpClient();
+                using var cts = new CancellationTokenSource(timeoutMs);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, cts.Token);
+
+                await client.ConnectAsync(ip, port, linkedCts.Token);
+                if (client.Connected)
+                {
+                    Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
+                    lock (foundDevices)
+                    {
+                        foundDevices.Add(ip);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is SocketException or OperationCanceledException)
+            {
+                // Expected failures during network scanning are ignored to continue the scan.
+            }
+        });
+
         return foundDevices;
     }
 
