@@ -68,10 +68,9 @@
                                 <div id="terminalContainer_@ComponentId"
                                      class="terminal-container border rounded"
                                      style="height: 400px;">
-                                    @foreach (var line in Shuttle.GetTerminalMessages())
-                                    {
+                                    <Virtualize TItem="string" Items="@Shuttle.GetTerminalMessages()" Context="line">
                                         <div class="terminal-line">@line</div>
-                                    }
+                                    </Virtualize>
                                 </div>
                                 <div class="input-group input-group-sm mt-2">
                                     <span class="input-group-text">

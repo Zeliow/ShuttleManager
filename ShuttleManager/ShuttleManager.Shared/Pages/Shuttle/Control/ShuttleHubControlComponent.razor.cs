@@ -487,14 +487,8 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void OnLogReceived(string ip, string log)
     {
         if (!IsEventForThisShuttle(ip))
+        {
             return;
-
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
         }
 
         _logChannel.Writer.TryWrite(log);
@@ -508,10 +502,33 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
+                    var logsBatch = new List<string>();
+                    while (_logChannel.Reader.TryRead(out var log))
+                    {
+                        logsBatch.Add(log);
+                    }
+
+                    if (logsBatch.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    // Background file I/O: Process timestamping and writing outside the UI thread.
+                    try
+                    {
+                        var timestampedLogs = logsBatch.Select(l => $"[{DateTime.Now}] {l}").ToArray();
+                        await File.AppendAllLinesAsync(pathLogShuttle, timestampedLogs, _componentCts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to write logs to file for {IpAddress}", Shuttle.IPAddress);
+                    }
+
                     bool stateChanged = false;
                     await InvokeAsync(() =>
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
+                        var terminalBatch = new List<string>();
+                        foreach (var log in logsBatch)
                         {
                             ParseAndHandleResponse(log);
                             if (log.StartsWith("-----------------------------------------------"))
@@ -532,17 +549,25 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
                                 _statusBlockLines.Add(log);
                             }
 
+                            string terminalMsg;
                             if (log.Contains("##HEARTBEAT##"))
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                terminalMsg = $"[HEARTBEAT] {log}\n";
                             }
                             else
                             {
+                                // Fast prefix check for telemetry to avoid expensive regex/parsing if possible
                                 var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                terminalMsg = $"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n";
                             }
 
+                            terminalBatch.Add(terminalMsg);
                             stateChanged = true;
+                        }
+
+                        if (terminalBatch.Count > 0)
+                        {
+                            Shuttle.AddRangeTerminalMessages(terminalBatch);
                         }
 
                         if (stateChanged)
@@ -566,16 +591,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Ошибка в цикле обработки логов");
-        }
-    }
-
-    private void LogToTerminalInternal(string message)
-    {
-        Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
         }
     }
 
@@ -808,12 +823,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
-
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();
     }
