@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using ShuttleManager.Shared.Interfaces;
@@ -46,42 +47,37 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
     public async Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int port, int timeoutMs = 1000)
     {
-        var foundDevices = new List<IPAddress>();
-        var tasks = new List<Task>();
+        // Use ConcurrentBag for thread-safe collection and Parallel.ForEachAsync to control concurrency and reduce thread pool pressure.
+        var foundDevices = new ConcurrentBag<IPAddress>();
+        var ipRange = Enumerable.Range(_startRange, _endRange - _startRange + 1);
 
-        //перебор подсети
-        for (int i = _startRange; i <= _endRange; i++)
+        await Parallel.ForEachAsync(ipRange, new ParallelOptions { MaxDegreeOfParallelism = 32 }, async (i, ct) =>
         {
-            string ip = $"{baseIp}.{i}";
-            var task = Task.Run(async () =>
+            var ip = IPAddress.Parse($"{baseIp}.{i}");
+            try
             {
-                try
-                {
-                    using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
-                    try
-                    {
-                        await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);
-                        if (client.Connected)
-                        {
-                            Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
-                            lock (foundDevices)
-                                foundDevices.Add(IPAddress.Parse(ip));
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                    }
-                }
-                catch (SocketException)
-                {
-                }
-            });
-            tasks.Add(task);
-        }
+                using var client = new TcpClient();
+                using var cts = new CancellationTokenSource(timeoutMs);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, ct);
 
-        await Task.WhenAll(tasks);
-        return foundDevices;
+                await client.ConnectAsync(ip, port, linkedCts.Token);
+                if (client.Connected)
+                {
+                    Debug.WriteLine("Старт TCP контакта для валидной точки входа.");
+                    foundDevices.Add(ip);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected on timeout or cancellation
+            }
+            catch (SocketException)
+            {
+                // Expected for unreachable devices
+            }
+        });
+
+        return [.. foundDevices];
     }
 
     public List<Shuttle> GetConnectedShuttles()
