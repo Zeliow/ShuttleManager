@@ -489,31 +489,50 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
         _logChannel.Writer.TryWrite(log);
     }
 
     private async Task ProcessLogsLoopAsync()
     {
+        var rawLogsBatch = new List<string>();
+        var formattedLogsBatch = new List<string>();
+        var fileLogsBatch = new List<string>();
+
         try
         {
             while (!_componentCts.Token.IsCancellationRequested)
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
+                    rawLogsBatch.Clear();
+                    formattedLogsBatch.Clear();
+                    fileLogsBatch.Clear();
+
+                    while (_logChannel.Reader.TryRead(out var log))
+                    {
+                        rawLogsBatch.Add(log);
+                        fileLogsBatch.Add($"[{DateTime.Now}] {log}");
+                    }
+
+                    if (fileLogsBatch.Count > 0)
+                    {
+                        try
+                        {
+                            await File.AppendAllLinesAsync(pathLogShuttle, fileLogsBatch);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogWarning(ex, "Failed to write logs to file");
+                        }
+                    }
+
                     await InvokeAsync(() =>
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
+                        foreach (var log in rawLogsBatch)
                         {
+                            var timestamp = DateTime.Now;
                             ParseAndHandleResponse(log);
+
                             if (log.StartsWith("-----------------------------------------------"))
                             {
                                 if (!_inStatusBlock)
@@ -534,24 +553,24 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
 
                             if (log.Contains("##HEARTBEAT##"))
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                formattedLogsBatch.Add($"[HEARTBEAT] {log}\n");
                             }
                             else
                             {
-                                var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                int telemetryIndex = log.IndexOf("##TELEMETRY##");
+                                var cleanLog = telemetryIndex >= 0 ? log.Substring(0, telemetryIndex) : log;
+                                formattedLogsBatch.Add($"[{timestamp:HH:mm:ss}] {cleanLog}\n");
                             }
-
-                            stateChanged = true;
                         }
 
-                        if (stateChanged)
+                        if (formattedLogsBatch.Count > 0)
                         {
+                            Shuttle.AddRangeTerminalMessages(formattedLogsBatch);
                             StateHasChanged();
                         }
                     });
 
-                    if (stateChanged)
+                    if (formattedLogsBatch.Count > 0)
                     {
                         _ = ScrollTerminalToBottomAsync();
                     }
@@ -572,11 +591,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminalInternal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
     }
 
     private async Task SendCommandAsync(string command, string description = "")
@@ -808,11 +822,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
 
         StateHasChanged();
         _ = ScrollTerminalToBottomAsync();

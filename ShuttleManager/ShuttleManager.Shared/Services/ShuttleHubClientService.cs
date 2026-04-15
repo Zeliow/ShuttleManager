@@ -58,7 +58,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
                 try
                 {
                     using var client = new TcpClient();
-                    var cts = new CancellationTokenSource(timeoutMs);
+                    using var cts = new CancellationTokenSource(timeoutMs);
                     try
                     {
                         await client.ConnectAsync(IPAddress.Parse(ip), port, cts.Token);

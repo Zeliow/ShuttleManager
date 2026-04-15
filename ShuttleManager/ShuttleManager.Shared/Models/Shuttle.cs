@@ -53,6 +53,16 @@ public class Shuttle
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            PruneTerminalMessagesInternal();
         }
     }
 
@@ -67,6 +77,17 @@ public class Shuttle
     public void RemoveTerminalMessage()
     {
         lock (_lock)
+        {
+            if (_terminalMessages.Count > 500)
+            {
+                _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
+            }
+        }
+    }
+
+    private void PruneTerminalMessagesInternal()
+    {
+        if (_terminalMessages.Count > 900)
         {
             _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
         }
@@ -83,7 +104,12 @@ public class Shuttle
         }
     }
 
-    public IReadOnlyList<string> GetTerminalMessages()
+    /// <summary>
+    /// Returns the underlying message collection.
+    /// NOTE: In the context of the Blazor UI, modifications must be serialized via InvokeAsync to prevent
+    /// InvalidOperationException during rendering/virtualization.
+    /// </summary>
+    public ICollection<string> GetTerminalMessages()
     {
         lock (_lock)
         {
