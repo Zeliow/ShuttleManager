@@ -83,11 +83,11 @@ public class Shuttle
         }
     }
 
-    public IReadOnlyList<string> GetTerminalMessages()
+    public ICollection<string> GetTerminalMessages()
     {
         lock (_lock)
         {
-            return _terminalMessages;
+            return _terminalMessages.ToArray();
         }
     }
 }
