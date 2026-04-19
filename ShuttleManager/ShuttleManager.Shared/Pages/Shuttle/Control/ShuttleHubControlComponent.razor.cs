@@ -49,7 +49,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private int _pallentDistance = 0;
     private static bool IsAndroid => OperatingSystem.IsAndroid();
 
-    private readonly Channel<string> _logChannel = Channel.CreateUnbounded<string>();
+    private readonly Channel<(string Log, DateTime Timestamp)> _logChannel = Channel.CreateUnbounded<(string Log, DateTime Timestamp)>();
     private readonly List<string> _statusBlockLines = new();
 
     private string _manualCommand = string.Empty;
@@ -489,15 +489,7 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
         if (!IsEventForThisShuttle(ip))
             return;
 
-        try
-        {
-            File.AppendAllText(pathLogShuttle, $"[{DateTime.Now}] {log}\n");
-        }
-        catch
-        {
-        }
-
-        _logChannel.Writer.TryWrite(log);
+        _logChannel.Writer.TryWrite((log, DateTime.Now));
     }
 
     private async Task ProcessLogsLoopAsync()
@@ -508,12 +500,36 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
             {
                 if (await _logChannel.Reader.WaitToReadAsync(_componentCts.Token))
                 {
-                    bool stateChanged = false;
+                    var logBatch = new List<(string Log, DateTime Timestamp)>();
+                    while (_logChannel.Reader.TryRead(out var item))
+                    {
+                        logBatch.Add(item);
+                    }
+
+                    if (logBatch.Count == 0)
+                        continue;
+
+                    // Offload file I/O to a background thread
+                    var fileLogs = logBatch.Select(x => $"[{x.Timestamp}] {x.Log}").ToArray();
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await File.AppendAllLinesAsync(pathLogShuttle, fileLogs);
+                        }
+                        catch
+                        {
+                            // Ignore log file write errors to prevent UI loop disruption
+                        }
+                    });
+
                     await InvokeAsync(() =>
                     {
-                        while (_logChannel.Reader.TryRead(out var log))
+                        var terminalBatch = new List<string>();
+                        foreach (var (log, timestamp) in logBatch)
                         {
                             ParseAndHandleResponse(log);
+
                             if (log.StartsWith("-----------------------------------------------"))
                             {
                                 if (!_inStatusBlock)
@@ -534,27 +550,24 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
 
                             if (log.Contains("##HEARTBEAT##"))
                             {
-                                LogToTerminalInternal($"[HEARTBEAT] {log}\n");
+                                terminalBatch.Add($"[HEARTBEAT] {log}\n");
                             }
                             else
                             {
                                 var cleanLog = log.Contains("##TELEMETRY##") ? log.Substring(0, log.IndexOf("##TELEMETRY##")) : log;
-                                LogToTerminalInternal($"[{DateTime.Now:HH:mm:ss}] {cleanLog}\n");
+                                terminalBatch.Add($"[{timestamp:HH:mm:ss}] {cleanLog}\n");
                             }
-
-                            stateChanged = true;
                         }
 
-                        if (stateChanged)
+                        if (terminalBatch.Count > 0)
                         {
-                            StateHasChanged();
+                            Shuttle.AddRangeTerminalMessages(terminalBatch);
                         }
+
+                        StateHasChanged();
                     });
 
-                    if (stateChanged)
-                    {
-                        _ = ScrollTerminalToBottomAsync();
-                    }
+                    _ = ScrollTerminalToBottomAsync();
 
                     await Task.Delay(100, _componentCts.Token);
                 }
@@ -572,11 +585,6 @@ public partial class ShuttleHubControlComponent : IAsyncDisposable
     private void LogToTerminalInternal(string message)
     {
         Shuttle.AddTerminalMessage(message);
-
-        if (Shuttle.TerminalMessageCount > 900)
-        {
-            Shuttle.RemoveTerminalMessage();
-        }
     }
 
     private async Task SendCommandAsync(string command, string description = "")

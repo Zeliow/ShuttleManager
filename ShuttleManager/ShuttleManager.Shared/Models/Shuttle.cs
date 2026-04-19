@@ -53,6 +53,16 @@ public class Shuttle
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            PruneTerminalMessagesInternal();
         }
     }
 
@@ -68,7 +78,7 @@ public class Shuttle
     {
         lock (_lock)
         {
-            _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
+            PruneTerminalMessagesInternal();
         }
     }
 
@@ -83,11 +93,24 @@ public class Shuttle
         }
     }
 
-    public IReadOnlyList<string> GetTerminalMessages()
+    /// <summary>
+    /// Gets a thread-safe snapshot of the terminal messages.
+    /// Using ICollection is required for Blazor's Virtualize component to enable count-based virtualization.
+    /// </summary>
+    /// <returns>A snapshot of the messages.</returns>
+    public ICollection<string> GetTerminalMessages()
     {
         lock (_lock)
         {
-            return _terminalMessages;
+            return _terminalMessages.ToArray();
+        }
+    }
+
+    private void PruneTerminalMessagesInternal()
+    {
+        if (_terminalMessages.Count > 900)
+        {
+            _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
         }
     }
 }
