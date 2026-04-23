@@ -68,10 +68,12 @@
                                 <div id="terminalContainer_@ComponentId"
                                      class="terminal-container border rounded"
                                      style="height: 400px;">
-                                    @foreach (var line in Shuttle.GetTerminalMessages())
-                                    {
+                                    @* Performance Optimization: Use <Virtualize> to render only visible lines.
+                                       Cast to ICollection<string> is required because Virtualize.Items expects ICollection,
+                                       but we want to keep Shuttle.GetTerminalMessages() returning IReadOnlyList for API compatibility. *@
+                                    <Virtualize TItem="string" Items="@((ICollection<string>)Shuttle.GetTerminalMessages())" Context="line">
                                         <div class="terminal-line">@line</div>
-                                    }
+                                    </Virtualize>
                                 </div>
                                 <div class="input-group input-group-sm mt-2">
                                     <span class="input-group-text">

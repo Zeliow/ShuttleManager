@@ -87,7 +87,8 @@ public class Shuttle
     {
         lock (_lock)
         {
-            return _terminalMessages;
+            // Returns a snapshot to prevent "Collection was modified" during rendering
+            return _terminalMessages.ToArray();
         }
     }
 }
