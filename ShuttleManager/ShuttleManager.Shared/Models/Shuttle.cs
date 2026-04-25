@@ -1,4 +1,4 @@
-﻿using System.Net.Sockets;
+using System.Net.Sockets;
 
 namespace ShuttleManager.Shared.Models;
 
@@ -53,6 +53,16 @@ public class Shuttle
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            PruneTerminalMessagesInternal();
         }
     }
 
@@ -64,11 +74,20 @@ public class Shuttle
         }
     }
 
+    private void PruneTerminalMessagesInternal()
+    {
+        // Enforce 900 message limit, truncate to 500 when exceeded
+        if (_terminalMessages.Count > 900)
+        {
+            _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
+        }
+    }
+
     public void RemoveTerminalMessage()
     {
         lock (_lock)
         {
-            _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
+            PruneTerminalMessagesInternal();
         }
     }
 
@@ -87,7 +106,8 @@ public class Shuttle
     {
         lock (_lock)
         {
-            return _terminalMessages;
+            // Return an array snapshot to prevent 'Collection was modified' exceptions during Blazor rendering
+            return _terminalMessages.ToArray();
         }
     }
 }
