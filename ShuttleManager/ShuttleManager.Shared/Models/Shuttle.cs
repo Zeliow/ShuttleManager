@@ -53,6 +53,16 @@ public class Shuttle
         lock (_lock)
         {
             _terminalMessages.Add(message);
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    public void AddRangeTerminalMessages(IEnumerable<string> messages)
+    {
+        lock (_lock)
+        {
+            _terminalMessages.AddRange(messages);
+            PruneTerminalMessagesInternal();
         }
     }
 
@@ -64,9 +74,19 @@ public class Shuttle
         }
     }
 
+    [Obsolete("Use internal pruning via Add/AddRange methods")]
     public void RemoveTerminalMessage()
     {
         lock (_lock)
+        {
+            PruneTerminalMessagesInternal();
+        }
+    }
+
+    private void PruneTerminalMessagesInternal()
+    {
+        // Limit to 900 messages, truncate to 500 when exceeded to reduce pruning frequency
+        if (_terminalMessages.Count > 900)
         {
             _terminalMessages.RemoveRange(0, _terminalMessages.Count - 500);
         }
@@ -87,7 +107,8 @@ public class Shuttle
     {
         lock (_lock)
         {
-            return _terminalMessages;
+            // Return a thread-safe snapshot to prevent 'Collection was modified' during Blazor rendering
+            return _terminalMessages.ToArray();
         }
     }
 }

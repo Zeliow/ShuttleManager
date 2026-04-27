@@ -67,11 +67,12 @@
                                 </div>
                                 <div id="terminalContainer_@ComponentId"
                                      class="terminal-container border rounded"
-                                     style="height: 400px;">
-                                    @foreach (var line in Shuttle.GetTerminalMessages())
-                                    {
-                                        <div class="terminal-line">@line</div>
-                                    }
+                                     style="height: 400px; overflow-y: auto;">
+                                    <Virtualize TItem="string" Items="@((ICollection<string>)Shuttle.GetTerminalMessages())" OverscanCount="10">
+                                        <ItemContent>
+                                            <div class="terminal-line">@context</div>
+                                        </ItemContent>
+                                    </Virtualize>
                                 </div>
                                 <div class="input-group input-group-sm mt-2">
                                     <span class="input-group-text">
