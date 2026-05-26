@@ -138,7 +138,14 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
             connection.Transport = new TcpConnection(tcpClient);
 
-            connection.ShuttleId = shuttleNums[int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131];
+            if (ipAddress[ipAddress.Length - 1] == '0')
+            {
+                connection.ShuttleId = shuttleNums[0];
+            }
+            else
+            {
+                connection.ShuttleId = shuttleNums[int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131];
+            }
 
             OnConnected(ipAddress, connection.ShuttleId);
 
