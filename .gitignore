@@ -64,3 +64,7 @@ htmlcov/
 /.vs/ShuttleManager.slnx/v18/.suo
 /.vs/ShuttleManager.slnx/DesignTimeBuild/.dtbcache.v2
 *.vsidx
+/.vs/ShuttleManager/CopilotIndices/18.6.39577.51406/CodeChunks.db
+/.vs/ShuttleManager/CopilotIndices/18.6.39577.51406/SemanticSymbols.db
+/.vs/ShuttleManager.slnx/v18/DocumentLayout.backup.json
+/.vs/ShuttleManager.slnx/v18/DocumentLayout.json
