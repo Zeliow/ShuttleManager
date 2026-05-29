@@ -65,9 +65,17 @@
                         <div class="card mb-2">
                             <div class="card-body p-2">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label>
-                                        @SwitchLabelView()
-                                    </label>
+                                    <div style="display: flex; align-items: flex-start;">
+                                        <label>
+                                            @SwitchLabelView()
+                                        </label>
+                                        <button class="btn btn-sm btn-outline-secondary ms-2"
+                                                @onclick="ToggleShowTime"
+                                                title="Показывать время">
+                                            <i class="bi @(isShowTime ? "bi-check-square-fill" : "bi-square")"></i>
+                                        </button>
+                                    </div>
+                                    
                                     <div>
                                         <button class="btn btn-sm btn-outline-info me-1"
                                                 @onclick="SensorView"

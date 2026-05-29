@@ -81,7 +81,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private bool _statsView = false;
 
     private bool isReversed = false;
-
+    private bool isShowTime = true;
     protected override async Task OnInitializedAsync()
     {
         try
@@ -158,6 +158,11 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         {
             return "Терминал";
         }
+    }
+
+    private void ToggleShowTime()
+    {
+        isShowTime = !isShowTime;
     }
 
     private async Task StartOta(OtaTarget target)
@@ -384,7 +389,14 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
             if (msg is RawLogMessage or AckMessage or ConfigMessage)
             {
-                LogToTerminal($"{timestamp}{formattedString}\n");
+                if (isShowTime)
+                {
+                    LogToTerminal($"{timestamp}{formattedString}\n");
+                }
+                else
+                {
+                    LogToTerminal($"{formattedString}\n");
+                }               
             }
 
             StateHasChanged();
