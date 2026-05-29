@@ -16,7 +16,7 @@ public static class BinaryCommandMapper
             ShuttleCommand.LongUnload => CmdType.CMD_LONG_UNLOAD,
             ShuttleCommand.Demo => CmdType.CMD_DEMO,
             ShuttleCommand.SystemReset => CmdType.CMD_SYSTEM_RESET,
-            ShuttleCommand.Reset => CmdType.CMD_SYSTEM_RESET,
+            ShuttleCommand.Reset => CmdType.CMD_RESET_ERROR,
             ShuttleCommand.SaveConfig => CmdType.CMD_SAVE_EEPROM,
             ShuttleCommand.LiftUp => CmdType.CMD_LIFT_UP,
             ShuttleCommand.LiftDown => CmdType.CMD_LIFT_DOWN,
