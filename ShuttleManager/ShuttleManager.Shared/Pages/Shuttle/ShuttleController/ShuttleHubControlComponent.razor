@@ -75,7 +75,7 @@
                                             <i class="bi @(isShowTime ? "bi-check-square-fill" : "bi-square")"></i>
                                         </button>
                                     </div>
-                                    
+
                                     <div>
                                         <button class="btn btn-sm btn-outline-info me-1"
                                                 @onclick="SensorView"
@@ -186,7 +186,11 @@
                                                     <b>Обновить STM</b>
                                                 </button>
                                                 <label for="Erase">full erase STM: </label>
-                                                <input class="form-check-input" type="checkbox" id="IsArase" name="Erase" checked="@_isFullErased" @onchange="OnAraseModeChanged" />
+                                                <input class="form-check-input"
+                                                       type="checkbox"
+                                                       id="IsErase"
+                                                       name="Erase"
+                                                       @bind="_isFullErased" />
                                             </div>
                                             <div class="col-6 mb-1">
                                                 <button class="btn btn-warning btn-sm w-100" disabled="@_isOtaRunning" @onclick="() => StartOta(OtaTarget.Esp32)">

@@ -82,6 +82,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
 
     private bool isReversed = false;
     private bool isShowTime = true;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -127,10 +128,10 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         }
     }
 
-    private async Task OnAraseModeChanged()
-    {
-        _isFullErased = !_isFullErased;
-    }
+    //private async Task OnAraseModeChanged()
+    //{
+    //    _isFullErased = !_isFullErased;
+    //}
 
     private void SensorView()
     {
@@ -396,7 +397,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
                 else
                 {
                     LogToTerminal($"{formattedString}\n");
-                }               
+                }
             }
 
             StateHasChanged();
