@@ -55,7 +55,6 @@
                         <p class="small fw-bold text-danger" style="margin-bottom: 0px; font-size: 12px;">
                             @if (Shuttle.ErrorCode != ShuttleFault.FAULT_NONE)
 @Shuttle.ErrorCode
-                            
 </p>
                     </div>
                 </div>
@@ -112,11 +111,12 @@
                                         <span class="input-group-text">
                                             <i class="bi bi-terminal"></i>
                                         </span>
-                                        <InputText @bind-Value="ManualCommand"
-                                                   class="form-control form-control-sm"
-                                                   placeholder="Введите команду..."
-                                                   @onkeypress="HandleKeyPress"
-                                                   disabled="@(!IsConnected || _isCommandInProgress)" />
+                                        <input @bind="ManualCommand"
+                                               @bind:event="oninput"
+                                               class="form-control form-control-sm"
+                                               placeholder="Введите команду..."
+                                               @onkeydown="HandleKeyPress"
+                                               disabled="@(!IsConnected || _isCommandInProgress)" />
                                         <button class="btn btn-primary btn-sm"
                                                 @onclick="SendManualCommand">
                                             Отпр
