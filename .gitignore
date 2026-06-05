@@ -68,3 +68,7 @@ htmlcov/
 /.vs/ShuttleManager/CopilotIndices/18.6.39577.51406/SemanticSymbols.db
 /.vs/ShuttleManager.slnx/v18/DocumentLayout.backup.json
 /.vs/ShuttleManager.slnx/v18/DocumentLayout.json
+/.vs/ProjectEvaluation/shuttlemanager.metadata.v10.bin
+/.vs/ProjectEvaluation/shuttlemanager.projects.v10.bin
+/.vs/ProjectEvaluation/shuttlemanager.strings.v10.bin
+/ShuttleManager/ShuttleManager/ShuttleManager.csproj.user
