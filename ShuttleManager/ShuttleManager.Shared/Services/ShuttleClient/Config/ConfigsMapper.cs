@@ -1,5 +1,6 @@
 ﻿using ShuttleManager.Shared.Models.Protocol;
 using ShuttleManager.Shared.Services.Enums;
+using System.Diagnostics;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.Config;
 

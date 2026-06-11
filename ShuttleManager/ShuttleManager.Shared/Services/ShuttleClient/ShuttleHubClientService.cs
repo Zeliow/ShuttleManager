@@ -1,14 +1,14 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
-using ShuttleManager.Shared.Interfaces;
+﻿using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.BinaryService;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 using ShuttleManager.Shared.Services.ShuttleClient.LegacyService;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient;
 
@@ -138,7 +138,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
             connection.Transport = new TcpConnection(tcpClient);
 
-            if (ipAddress[ipAddress.Length - 1] == '0')
+            if (int.Parse(ipAddress.Substring(ipAddress.LastIndexOf('.') + 1)) == 130)
             {
                 connection.ShuttleId = shuttleNums[0];
             }
@@ -248,6 +248,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         int arg1 = 0,
         int arg2 = 0)
     {
+        Debug.WriteLine($"[ShuttleHubClientService] IP {ip}; Command: {command}");
         if (!_connections.TryGetValue(ip, out var conn))
             return false;
 
@@ -273,6 +274,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
     public async Task<bool> SendManualCommandAsync(string ip, string rawCommand, int timeoutMs = 1000)
     {
+        Debug.WriteLine($"[ShuttleHubClientService] IP {ip}; rawCommand: {rawCommand}");
         if (!_connections.TryGetValue(ip, out var conn))
             return false;
 

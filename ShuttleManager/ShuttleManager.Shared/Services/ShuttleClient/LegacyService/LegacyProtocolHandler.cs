@@ -71,6 +71,7 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
 
     private async Task<bool> SendPacketAsync(ShuttleConnection connection, string text, CancellationToken cancellationToken)
     {
+        Debug.WriteLine($"Shuttle Connection: {connection}; Command: {text}");
         if (!text.EndsWith("\n"))
             text += "\n";
         var data = Encoding.UTF8.GetBytes(text);
@@ -92,10 +93,11 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
 
     public async Task<bool> SendConfigAsync(ShuttleConnection connection, ShuttleConfigCommand param, int value, int timeoutMs = 1000)
     {
+        Debug.WriteLine($"#1. Текущее состояние  ID: {connection.ShuttleId}");
+        var text = LegacyConfigMapper.Map(connection.ShuttleId, param, value);
+
         if (param == ShuttleConfigCommand.ShuttleNumber)
             connection.ShuttleId = Convert.ToString(value);
-
-        var text = LegacyConfigMapper.Map(connection.ShuttleId, param, value);
 
         return await SendPacketAsync(connection, text, CancellationToken.None);
     }

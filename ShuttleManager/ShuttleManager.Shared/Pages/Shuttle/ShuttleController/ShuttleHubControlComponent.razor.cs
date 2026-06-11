@@ -761,9 +761,9 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         }
     }
 
-    private async Task SendFRMFirmwareCommand() => await SendUpdateCommandAndOpenBrowser();
+    private async Task SendFRMFirmwareCommand() => await SendUPDCommandAndOpenBrowser();
 
-    private async Task SendUpdateStateShuttleCommand() => await SendUPDCommandAndOpenBrowser();
+    private async Task SendUpdateStateShuttleCommand() => await SendUpdateCommandAndOpenBrowser();
 
     private async Task SendUpdateCommandAndOpenBrowser()
     {
