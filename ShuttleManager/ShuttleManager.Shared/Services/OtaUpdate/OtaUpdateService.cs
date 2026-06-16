@@ -250,6 +250,91 @@ public sealed class OtaUpdateService : IOtaUpdateService
         return OtaResult.Success();
     }
 
+    //// ================= ESP =================
+    //private async Task<OtaResult> RunEspAsync(
+    //    string ip,
+    //    byte[] fw,
+    //    IProgress<OtaProgress>? progress,
+    //    CancellationToken token)
+    //{
+    //    using var client = new TcpClient();
+    //    client.NoDelay = true;
+    //    client.SendBufferSize = 64 * 1024;
+
+    //    _logger.LogInformation("[ESP] Connecting to {Ip}:{Port}...", ip, ESP_PORT);
+    //    await client.ConnectAsync(ip, ESP_PORT, token);
+    //    using var stream = client.GetStream();
+
+    //    _logger.LogInformation("[ESP] Sending CMD_INIT (Begin Update)...");
+    //    stream.ReadTimeout = 5000;
+    //    await SendByte(stream, CMD_INIT, token);
+
+    //    var sizeBytes = new byte[4];
+    //    BinaryPrimitives.WriteUInt32LittleEndian(sizeBytes, (uint)fw.Length);
+    //    await stream.WriteAsync(sizeBytes, token);
+    //    await EnsureOk(stream, token);
+
+    //    _logger.LogInformation("[ESP] Starting Chunked Firmware Upload (Robust Mode)...");
+
+    //    int offset = 0;
+    //    int lastLogPercent = 0;
+
+    //    while (offset < fw.Length)
+    //    {
+    //        token.ThrowIfCancellationRequested();
+
+    //        int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
+    //        bool chunkSuccess = false;
+
+    //        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
+    //        {
+    //            try
+    //            {
+    //                stream.ReadTimeout = 10000;
+
+    //                var header = new byte[7];
+    //                header[0] = CMD_WRITE_CHUNK;
+    //                BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), (uint)offset);
+    //                BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
+
+    //                await stream.WriteAsync(header, token);
+    //                await stream.WriteAsync(fw.AsMemory(offset, len), token);
+
+    //                await EnsureOk(stream, token);
+
+    //                chunkSuccess = true;
+    //                break;
+    //            }
+    //            catch (Exception ex)
+    //            {
+    //                _logger.LogWarning("[ESP] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
+    //                if (attempt == MAX_RETRIES)
+    //                    return OtaResult.Fail($"Failed at offset {offset}");
+    //                await Task.Delay(500, token);
+    //            }
+    //        }
+
+    //        if (chunkSuccess)
+    //        {
+    //            offset += len;
+    //            progress?.Report(new OtaProgress(offset, fw.Length));
+
+    //            int percent = (int)((offset * 100) / fw.Length);
+    //            if (percent - lastLogPercent >= 10)
+    //            {
+    //                _logger.LogInformation("[ESP] Uploading... {Percent}%", percent);
+    //                lastLogPercent = percent;
+    //            }
+    //        }
+    //    }
+
+    //    _logger.LogInformation("[ESP] Upload complete. Sending CMD_RUN (Finalizing & Restarting)...");
+    //    stream.ReadTimeout = 15000;
+    //    await SendByte(stream, CMD_RUN, token);
+    //    await EnsureOk(stream, token);
+
+    //    return OtaResult.Success();
+    //}
     // ================= ESP =================
     private async Task<OtaResult> RunEspAsync(
         string ip,
@@ -265,73 +350,61 @@ public sealed class OtaUpdateService : IOtaUpdateService
         await client.ConnectAsync(ip, ESP_PORT, token);
         using var stream = client.GetStream();
 
+        // 1. INIT (Упаковываем команду и размер в один TCP-пакет)
         _logger.LogInformation("[ESP] Sending CMD_INIT (Begin Update)...");
         stream.ReadTimeout = 5000;
-        await SendByte(stream, CMD_INIT, token);
 
-        var sizeBytes = new byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(sizeBytes, (uint)fw.Length);
-        await stream.WriteAsync(sizeBytes, token);
+        byte[] initPayload = new byte[5];
+        initPayload[0] = CMD_INIT; // 0x01
+        BinaryPrimitives.WriteUInt32LittleEndian(initPayload.AsSpan(1), (uint)fw.Length);
+
+        await stream.WriteAsync(initPayload, token);
         await EnsureOk(stream, token);
+        _logger.LogInformation("[ESP] Update.begin() successful.");
 
-        _logger.LogInformation("[ESP] Starting Chunked Firmware Upload (Robust Mode)...");
+        // 2. СТАРТ ПОТОКА (STREAM WRITE)
+        _logger.LogInformation("[ESP] Starting Stream Firmware Upload...");
 
+        byte[] streamHeader = new byte[5];
+        streamHeader[0] = CMD_WRITE_STREAM; // 0x05
+        BinaryPrimitives.WriteUInt32LittleEndian(streamHeader.AsSpan(1), (uint)fw.Length);
+
+        await stream.WriteAsync(streamHeader, token);
+        await EnsureOk(stream, token);
+        _logger.LogInformation("[ESP] Stream header accepted. Sending data...");
+
+        // 3. ОТПРАВКА ДАННЫХ
         int offset = 0;
+        int streamChunkSize = 4096; // Размер блока для передачи по сети
         int lastLogPercent = 0;
 
         while (offset < fw.Length)
         {
             token.ThrowIfCancellationRequested();
+            int len = Math.Min(streamChunkSize, fw.Length - offset);
 
-            int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
-            bool chunkSuccess = false;
+            await stream.WriteAsync(fw.AsMemory(offset, len), token);
+            offset += len;
 
-            for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
+            progress?.Report(new OtaProgress(offset, fw.Length));
+
+            int percent = (int)((offset * 100) / fw.Length);
+            if (percent - lastLogPercent >= 10)
             {
-                try
-                {
-                    stream.ReadTimeout = 10000;
-
-                    var header = new byte[7];
-                    header[0] = CMD_WRITE_CHUNK;
-                    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), (uint)offset);
-                    BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
-
-                    await stream.WriteAsync(header, token);
-                    await stream.WriteAsync(fw.AsMemory(offset, len), token);
-
-                    await EnsureOk(stream, token);
-
-                    chunkSuccess = true;
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning("[ESP] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
-                    if (attempt == MAX_RETRIES)
-                        return OtaResult.Fail($"Failed at offset {offset}");
-                    await Task.Delay(500, token);
-                }
+                _logger.LogInformation("[ESP] Streaming... {Percent}%", percent);
+                lastLogPercent = percent;
             }
 
-            if (chunkSuccess)
-            {
-                offset += len;
-                progress?.Report(new OtaProgress(offset, fw.Length));
-
-                int percent = (int)((offset * 100) / fw.Length);
-                if (percent - lastLogPercent >= 10)
-                {
-                    _logger.LogInformation("[ESP] Uploading... {Percent}%", percent);
-                    lastLogPercent = percent;
-                }
-            }
+            // Небольшая задержка, чтобы внутренний процесс записи во flash-память ESP32 успевал
+            await Task.Delay(10, token);
         }
 
-        _logger.LogInformation("[ESP] Upload complete. Sending CMD_RUN (Finalizing & Restarting)...");
-        stream.ReadTimeout = 15000;
+        // 4. ЗАПУСК ПРОШИВКИ (REBOOT)
+        _logger.LogInformation("[ESP] All data sent. Sending CMD_RUN (Finalizing & Restarting)...");
+        stream.ReadTimeout = 15000; // Финализация (Update.end) может занять пару секунд
         await SendByte(stream, CMD_RUN, token);
         await EnsureOk(stream, token);
+        _logger.LogInformation("[ESP] Target Rebooted Successfully.");
 
         return OtaResult.Success();
     }
