@@ -263,6 +263,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         ShuttleConfigCommand param,
         int value)
     {
+        Debug.WriteLine($"[ShuttleHubClientService] IP {ip}; Value: {value}; param: {param}");
         if (!_connections.TryGetValue(ip, out var connection))
             return false;
 

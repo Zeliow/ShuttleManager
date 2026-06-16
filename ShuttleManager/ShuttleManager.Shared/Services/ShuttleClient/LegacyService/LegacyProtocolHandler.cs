@@ -99,6 +99,8 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         if (param == ShuttleConfigCommand.ShuttleNumber)
             connection.ShuttleId = Convert.ToString(value);
 
+        Debug.WriteLine($"#2. Текущее состояние  ID: {connection.ShuttleId}");
+
         return await SendPacketAsync(connection, text, CancellationToken.None);
     }
 

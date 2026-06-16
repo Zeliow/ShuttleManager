@@ -101,76 +101,152 @@ public sealed class OtaUpdateService : IOtaUpdateService
         await EnsureOk(stream, token);
         _logger.LogInformation("[STM] Bootloader Initialized.");
 
+        //// 2. ERASE
+        //string eraseMode = fullErase ? "MASS ERASE (Deleting Config)" : "Smart Erase (Preserving Config)";
+        //_logger.LogInformation("[STM] Sending CMD_ERASE ({Mode} - This may take 30-45s)...", eraseMode);
+        //stream.ReadTimeout = 60000; // Important: Erase takes a long time
+
+        //await SendByte(stream, CMD_ERASE, token);
+        //await SendByte(stream, fullErase ? (byte)0x01 : (byte)0x00, token);
+        //await EnsureOk(stream, token);
+        //_logger.LogInformation("[STM] Flash Erased.");
+
         // 2. ERASE
-        string eraseMode = fullErase ? "MASS ERASE (Deleting Config)" : "Smart Erase (Preserving Config)";
-        _logger.LogInformation("[STM] Sending CMD_ERASE ({Mode} - This may take 30-45s)...", eraseMode);
+        string eraseModeStr = fullErase ? "MASS ERASE (Deleting Config)" : "Smart Erase (Preserving Config)";
+        _logger.LogInformation("[STM] Sending CMD_ERASE ({Mode} - This may take 30-45s)...", eraseModeStr);
         stream.ReadTimeout = 60000; // Important: Erase takes a long time
 
-        await SendByte(stream, CMD_ERASE, token);
-        await SendByte(stream, fullErase ? (byte)0x01 : (byte)0x00, token);
+        // Упаковываем команду и режим в один пакет
+        byte[] erasePayload = [CMD_ERASE, fullErase ? (byte)0x01 : (byte)0x00];
+        await stream.WriteAsync(erasePayload, token);
+
         await EnsureOk(stream, token);
         _logger.LogInformation("[STM] Flash Erased.");
 
-        // 3. CHUNKED WRITE WITH RETRIES
-        _logger.LogInformation("[STM] Starting Chunked Firmware Upload (Robust Mode) ...");
+        //// 3. CHUNKED WRITE WITH RETRIES
+        //_logger.LogInformation("[STM] Starting Chunked Firmware Upload (Robust Mode) ...");
 
+        //int offset = 0;
+        //int lastLogPercent = 0;
+
+        //while (offset < fw.Length)
+        //{
+        //    token.ThrowIfCancellationRequested();
+
+        //    int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
+        //    bool chunkSuccess = false;
+
+        //    for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
+        //    {
+        //        try
+        //        {
+        //            stream.ReadTimeout = 10000;
+
+        //            var header = new byte[7];
+        //            header[0] = CMD_WRITE_CHUNK;
+        //            BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), STM_BASE_ADDRESS + (uint)offset);
+        //            BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
+
+        //            await stream.WriteAsync(header, token);
+        //            await stream.WriteAsync(fw.AsMemory(offset, len), token);
+
+        //            await EnsureOk(stream, token);
+
+        //            chunkSuccess = true;
+        //            break;
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            _logger.LogWarning("[STM] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
+        //            if (attempt == MAX_RETRIES)
+        //                return OtaResult.Fail($"Failed at offset {offset}");
+        //            await Task.Delay(500, token);
+        //        }
+        //    }
+
+        //    if (chunkSuccess)
+        //    {
+        //        offset += len;
+        //        progress?.Report(new OtaProgress(offset, fw.Length));
+
+        //        int percent = (int)((offset * 100) / fw.Length);
+        //        if (percent - lastLogPercent >= 10) // Log every 10%
+        //        {
+        //            _logger.LogInformation("[STM] Uploading... {Percent}%", percent);
+        //            lastLogPercent = percent;
+        //        }
+        //    }
+        //}
+        //_logger.LogInformation("[STM] Upload complete. Sending CMD_RUN (Rebooting target)...");
+        //stream.ReadTimeout = 10000;
+        //await SendByte(stream, CMD_RUN, token);
+        //await EnsureOk(stream, token);
+
+        // 3. STREAM WRITE (Совместимо с ESP32 CMD_WRITE_STREAM = 0x05)
+        _logger.LogInformation("[STM] Starting Stream Firmware Upload...");
+
+        // 3.1 Формируем и отправляем заголовок стрима: [Команда 1B] [Адрес 4B] [Длина 4B]
+        byte[] streamHeader = new byte[9];
+        streamHeader[0] = CMD_WRITE_STREAM; // 0x05
+        BinaryPrimitives.WriteUInt32LittleEndian(streamHeader.AsSpan(1), STM_BASE_ADDRESS);
+        BinaryPrimitives.WriteUInt32LittleEndian(streamHeader.AsSpan(5), (uint)fw.Length);
+
+        await stream.WriteAsync(streamHeader, token);
+
+        // 3.2 ESP32 должна ответить RESP_OK (0xAA) на получение заголовка
+        stream.ReadTimeout = 5000;
+        await EnsureOk(stream, token);
+        _logger.LogInformation("[STM] Stream header accepted. Sending data...");
+
+        // 3.3 Отправляем саму прошивку кусками, чтобы не переполнить TCP-буфер
         int offset = 0;
+        int streamChunkSize = 4096; // Размер куска для отправки по сети
         int lastLogPercent = 0;
 
         while (offset < fw.Length)
         {
             token.ThrowIfCancellationRequested();
+            int len = Math.Min(streamChunkSize, fw.Length - offset);
 
-            int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
-            bool chunkSuccess = false;
+            await stream.WriteAsync(fw.AsMemory(offset, len), token);
+            offset += len;
 
-            for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
+            progress?.Report(new OtaProgress(offset, fw.Length));
+
+            int percent = (int)((offset * 100) / fw.Length);
+            if (percent - lastLogPercent >= 10)
             {
-                try
-                {
-                    stream.ReadTimeout = 10000;
-
-                    var header = new byte[7];
-                    header[0] = CMD_WRITE_CHUNK;
-                    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), STM_BASE_ADDRESS + (uint)offset);
-                    BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
-
-                    await stream.WriteAsync(header, token);
-                    await stream.WriteAsync(fw.AsMemory(offset, len), token);
-
-                    await EnsureOk(stream, token);
-
-                    chunkSuccess = true;
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning("[STM] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
-                    if (attempt == MAX_RETRIES)
-                        return OtaResult.Fail($"Failed at offset {offset}");
-                    await Task.Delay(500, token);
-                }
+                _logger.LogInformation("[STM] Streaming... {Percent}%", percent);
+                lastLogPercent = percent;
             }
 
-            if (chunkSuccess)
-            {
-                offset += len;
-                progress?.Report(new OtaProgress(offset, fw.Length));
-
-                int percent = (int)((offset * 100) / fw.Length);
-                if (percent - lastLogPercent >= 10) // Log every 10%
-                {
-                    _logger.LogInformation("[STM] Uploading... {Percent}%", percent);
-                    lastLogPercent = percent;
-                }
-            }
+            // Небольшая пауза, чтобы ESP32 успевала переваривать данные в UART
+            await Task.Delay(10, token);
         }
 
-        _logger.LogInformation("[STM] Upload complete. Sending CMD_RUN (Rebooting target)...");
+        //// 3.4 Ждем финального подтверждения от ESP32 после записи всей прошивки
+        //_logger.LogInformation("[STM] All data sent. Waiting for target to finish flashing...");
+        //stream.ReadTimeout = 60000; // Прошивка может занять время
+        //await EnsureOk(stream, token);
+        //_logger.LogInformation("[STM] Firmware Write Complete!");
+
+        //return OtaResult.Success();
+
+        // 3.4 Ждем финального подтверждения от ESP32 после записи всей прошивки
+        _logger.LogInformation("[STM] All data sent. Waiting for target to finish flashing...");
+        stream.ReadTimeout = 60000; // Прошивка может занять время
+        await EnsureOk(stream, token);
+        _logger.LogInformation("[STM] Firmware Write Complete!");
+
+        // ================= ДОБАВИТЬ ЭТОТ БЛОК =================
+        // 4. ЗАПУСК ПРОШИВКИ (REBOOT)
+        _logger.LogInformation("[STM] Sending CMD_RUN (Rebooting target)...");
         stream.ReadTimeout = 10000;
         await SendByte(stream, CMD_RUN, token);
         await EnsureOk(stream, token);
+        _logger.LogInformation("[STM] Target Rebooted Successfully.");
 
+        //  =======================================================
         return OtaResult.Success();
     }
 
