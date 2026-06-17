@@ -29,7 +29,7 @@ public static class LegacyConfigMapper
         DateTime currentTime = DateTime.Now;
         return cmd switch
         {
-            ShuttleConfigCommand.ReverseMode => $"{shuttleId}dRevMo", // ok?
+            ShuttleConfigCommand.ReverseMode => $"{shuttleId}dRev{(value == 1 ? "On" : "Off")}",
             ShuttleConfigCommand.MaxSpeed => $"{shuttleId}dSp{value}", // ok!
             ShuttleConfigCommand.MinBattery => $"{shuttleId}dBc{value}", // ok!
             ShuttleConfigCommand.InterPalletDistance => $"{shuttleId}dDm{value}", //ok!
