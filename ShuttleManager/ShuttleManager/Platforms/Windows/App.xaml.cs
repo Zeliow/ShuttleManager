@@ -31,7 +31,7 @@ namespace ShuttleManager.WinUI
             var window = Application.Windows.FirstOrDefault() as Microsoft.Maui.Controls.Window;
             if (window != null)
             {
-                window.Title = "Менеджер шаттлов B.V.5.3.3";
+                window.Title = "Менеджер шаттлов B.V.5.4. OTA 5.0 Ghz";
 
                 var nativeWindow = window.Handler.PlatformView as Microsoft.UI.Xaml.Window;
                 if (nativeWindow != null)
