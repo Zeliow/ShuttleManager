@@ -82,6 +82,27 @@ public sealed class OtaUpdateService : IOtaUpdateService
     private async Task<OtaResult> RunStmAsync(
         string ip, byte[] fw, IProgress<OtaProgress>? progress, CancellationToken token, bool fullErase)
     {
+        // ================= ВЫРАВНИВАНИЕ ПРОШИВКИ (PADDING) =================
+        int remainder = fw.Length % 256;
+        if (remainder != 0)
+        {
+            int padding = 256 - remainder;
+            byte[] paddedFw = new byte[fw.Length + padding];
+
+            // Копируем оригинальную прошивку
+            Array.Copy(fw, paddedFw, fw.Length);
+
+            // Добиваем хвост пустыми байтами (0xFF - стандарт для пустой flash-памяти)
+            for (int i = fw.Length; i < paddedFw.Length; i++)
+            {
+                paddedFw[i] = 0xFF;
+            }
+
+            fw = paddedFw;
+            _logger.LogInformation("[STM] Firmware padded by {Padding} bytes. Aligned size: {Size}", padding, fw.Length);
+        }
+        // ===================================================================
+
         using var client = new TcpClient { NoDelay = true, SendBufferSize = 64 * 1024 };
         await client.ConnectAsync(ip, STM_PORT, token);
         using var stream = client.GetStream();
@@ -95,6 +116,24 @@ public sealed class OtaUpdateService : IOtaUpdateService
         byte[] erasePayload = [CMD_ERASE, fullErase ? (byte)0x01 : (byte)0x00];
         await stream.WriteAsync(erasePayload, token);
         await EnsureOk(stream, token);
+
+        // ================= ДОБАВИТЬ ДЛЯ ОТЛАДКИ =================
+        if (fw.Length >= 8)
+        {
+            uint sp = BinaryPrimitives.ReadUInt32LittleEndian(fw.AsSpan(0, 4));
+            uint rv = BinaryPrimitives.ReadUInt32LittleEndian(fw.AsSpan(4, 4));
+            _logger.LogInformation("[STM] DIAGNOSTICS: Stack Pointer = 0x{SP:X8}, Reset Vector = 0x{RV:X8}", sp, rv);
+
+            // Хак для обхода кривой валидации в ESP-IDF, которая ложно бракует SP >= 0x20020000.
+            // Сдвигаем Stack Pointer на 4 байта вниз.
+            if (sp >= 0x20020000)
+            {
+                uint patchedSp = 0x2001FFFC;
+                BinaryPrimitives.WriteUInt32LittleEndian(fw.AsSpan(0, 4), patchedSp);
+                _logger.LogInformation("[STM] Patched Stack Pointer to 0x{SP:X8} to bypass ESP validation bug.", patchedSp);
+            }
+        }
+        // ========================================================
 
         // 3. ЗАПУСК STREAM (0x05)
         byte[] streamHeader = new byte[9];
