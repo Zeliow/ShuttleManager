@@ -132,7 +132,6 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     //{
     //    _isFullErased = !_isFullErased;
     //}
-
     private void SensorView()
     {
         _showSensorsView = !_showSensorsView;
@@ -249,6 +248,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     private async Task HandleHubConnectedAsync(string ip, string id)
     {
         if (!IsEventForThisShuttle(ip))
+
             return; // фильтруем все неактивные
 
         // Обновляем состояние UI
@@ -812,15 +812,12 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         }
     }
 
-    private void ClearTerminal()
-    {
-        Shuttle.ClearTerminalMessage();
-        _terminalOutputHtml = string.Empty;
-        StateHasChanged();
-    }
+    //new realizaton
+    private bool _shouldScrollToBottom = false;
 
     private void LogToTerminal(string message)
     {
+        // Парсинг и работа с бизнес-логикой могут происходить в фоне
         var lines = message.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
 
         Shuttle.AddTerminalMessage(message);
@@ -830,13 +827,34 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
             Shuttle.RemoveTerminalMessage();
         }
 
-        _terminalOutputHtml = string.Join(
-            string.Empty,
-            Shuttle.GetTerminalMessages().Select(line =>
-                $"<div class=\"terminal-line\">{System.Net.WebUtility.HtmlEncode(line)}</div>"));
+        // Всю работу с UI и вызов StateHasChanged оборачиваем в InvokeAsync!
+        InvokeAsync(() =>
+        {
+            _terminalOutputHtml = string.Join(
+                string.Empty,
+                Shuttle.GetTerminalMessages().Select(line =>
+                    $"<div class=\"terminal-line\">{System.Net.WebUtility.HtmlEncode(line)}</div>"));
 
-        //StateHasChanged();
-        _ = ScrollTerminalToBottomAsync();
+            _shouldScrollToBottom = true;
+            StateHasChanged();
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender || _shouldScrollToBottom)
+        {
+            await ScrollTerminalToBottomAsync();
+            _shouldScrollToBottom = false; // Сбрасываем флаг после успешной прокрутки
+        }
+    }
+
+    //new realizaton
+    private void ClearTerminal()
+    {
+        Shuttle.ClearTerminalMessage();
+        _terminalOutputHtml = string.Empty;
+        StateHasChanged();
     }
 
     private async Task ScrollTerminalToBottomAsync()
@@ -849,14 +867,6 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Ошибка скролла терминала");
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await ScrollTerminalToBottomAsync();
         }
     }
 
