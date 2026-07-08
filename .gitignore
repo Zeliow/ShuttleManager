@@ -72,3 +72,5 @@ htmlcov/
 /.vs/ProjectEvaluation/shuttlemanager.projects.v10.bin
 /.vs/ProjectEvaluation/shuttlemanager.strings.v10.bin
 /ShuttleManager/ShuttleManager/ShuttleManager.csproj.user
+/.vs
+/ShuttleManager/ShuttleManager.Web
