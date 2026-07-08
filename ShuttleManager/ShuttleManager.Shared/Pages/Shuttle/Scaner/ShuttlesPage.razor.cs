@@ -44,6 +44,9 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
             null,
             TimeSpan.FromSeconds(5),
             TimeSpan.FromSeconds(5));
+
+        // Start mock shuttle
+        _ = HubClientService.ConnectToShuttleAsync("127.0.0.1", port);
     }
 
     protected async Task CleanupDisconnectedShuttles()

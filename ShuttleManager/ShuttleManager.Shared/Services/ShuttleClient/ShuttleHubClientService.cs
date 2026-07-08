@@ -12,9 +12,11 @@ using System.Net.Sockets;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient;
 
+using ShuttleManager.Shared.Interfaces;
+
 public class ShuttleConnection
 {
-    public TcpConnection? Transport { get; set; }
+    public ITcpConnection? Transport { get; set; }
     public CancellationTokenSource? ReceiveCts { get; set; }
     public Task? ReceiveTask { get; set; }
     public string ShuttleId { get; set; } = string.Empty;
@@ -127,24 +129,33 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
         try
         {
-            Debug.WriteLine("Старт TCP контакта для прямого подключнения");
-
-            var tcpClient = new TcpClient();
-            await tcpClient.ConnectAsync(ipAddress, port);
-
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 60);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
-            connection.Transport = new TcpConnection(tcpClient);
-
-            if (int.Parse(ipAddress.Substring(ipAddress.LastIndexOf('.') + 1)) == 130)
+            if (ipAddress == "127.0.0.1")
             {
-                connection.ShuttleId = shuttleNums[0];
+                Debug.WriteLine("Старт TCP контакта для mock подключения");
+                connection.Transport = new MockTcpConnection();
+                connection.ShuttleId = "MOCK";
             }
             else
             {
-                connection.ShuttleId = shuttleNums[int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131];
+                Debug.WriteLine("Старт TCP контакта для прямого подключнения");
+
+                var tcpClient = new TcpClient();
+                await tcpClient.ConnectAsync(ipAddress, port);
+
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 60);
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
+                connection.Transport = new TcpConnection(tcpClient);
+
+                if (int.Parse(ipAddress.Substring(ipAddress.LastIndexOf('.') + 1)) == 130)
+                {
+                    connection.ShuttleId = shuttleNums[0];
+                }
+                else
+                {
+                    connection.ShuttleId = shuttleNums[int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131];
+                }
             }
 
             OnConnected(ipAddress, connection.ShuttleId);
