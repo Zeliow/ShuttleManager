@@ -20,7 +20,7 @@ public class StatsMessage : ShuttleMessageBase
             $"MotorStall: {Data.MotorStallCount}, " +
             $"LiftOverload: {Data.LifterOverloadCount}, " +
             $"Crash: {Data.CrashCount}, " +
-            $"WatchDogRes: {Data.WatchdogResets}, " +
+            $"WatchDogRes: {Data.ResetWatchdogCount}, " +
             $"LowBatteryEvents: {Data.LowBatteryEvents}";
     }
 }

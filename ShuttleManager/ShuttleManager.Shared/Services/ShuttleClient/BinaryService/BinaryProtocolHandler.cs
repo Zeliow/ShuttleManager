@@ -19,7 +19,7 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
 {
     private const byte PROTOCOL_SYNC_1_V2 = 0xBB;
     private const byte PROTOCOL_SYNC_2_V2 = 0xCC;
-    private const int MAX_PAYLOAD_SIZE = 64;
+    private const int MAX_PAYLOAD_SIZE = 120;
 
     private readonly ProtocolCallbacks _callbacks;
     private readonly ConcurrentDictionary<byte, TaskCompletionSource<bool>> _ackWaiters;
@@ -117,22 +117,77 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         ReadOnlySpan<byte> payload,
         byte seq)
     {
-        ShuttleMessageBase? message = msgId switch
+        switch (msgId)
         {
-            MsgID.MSG_HEARTBEAT => new TelemetryMessage { Data = MemoryMarshal.Read<TelemetryPacket>(payload) },
-            MsgID.MSG_SENSORS => new SensorMessage { Data = MemoryMarshal.Read<SensorPacket>(payload) },
-            MsgID.MSG_STATS => new StatsMessage { Data = MemoryMarshal.Read<StatsPacket>(payload) },
-            MsgID.MSG_LOG => new RawLogMessage { Level = (LogLevel)payload[0], Text = Encoding.UTF8.GetString(payload.Slice(1)) },
-            MsgID.MSG_CONFIG_SET => new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) },
-            MsgID.MSG_CONFIG_GET => new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) },
-            MsgID.MSG_CONFIG_REP => new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) },
-            MsgID.MSG_CONFIG_SYNC_REP => new FullConfigMessage { Data = MemoryMarshal.Read<FullConfigPacket>(payload) },
-            MsgID.MSG_ACK => HandleAck(payload),
-            _ => null // НЕ создаем новых MsgID!
-        };
+            case MsgID.MSG_HEARTBEAT:
+                Emit(connection, new TelemetryMessage { Data = MemoryMarshal.Read<TelemetryPacket>(payload) });
+                break;
 
-        if (message != null)
-            _callbacks.OnMessage?.Invoke(connection.IpAddress, message);
+            case MsgID.MSG_SENSORS:
+                Emit(connection, new SensorMessage { Data = MemoryMarshal.Read<SensorPacket>(payload) });
+                break;
+
+            case MsgID.MSG_STATS:
+                Emit(connection, new StatsMessage { Data = MemoryMarshal.Read<StatsPacket>(payload) });
+                break;
+
+            case MsgID.MSG_LOG:
+                Emit(connection, new RawLogMessage { Level = (LogLevel)payload[0], Text = Encoding.UTF8.GetString(payload.Slice(1)) });
+                break;
+
+            case MsgID.MSG_CONFIG_SET:
+            case MsgID.MSG_CONFIG_GET:
+            case MsgID.MSG_CONFIG_REP:
+                Emit(connection, new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) });
+                break;
+
+            case MsgID.MSG_CONFIG_SYNC_REP:
+                Emit(connection, new FullConfigMessage { Data = MemoryMarshal.Read<FullConfigPacket>(payload) });
+                break;
+
+            case MsgID.MSG_ACK:
+                Emit(connection, HandleAck(payload));
+                break;
+
+            case MsgID.MSG_LINK_HEALTH:
+                Emit(connection, new LinkHealthMessage { Data = MemoryMarshal.Read<LinkHealthPacket>(payload) });
+                break;
+
+            case MsgID.MSG_REQ_LINK_HEALTH:
+                // Request only — no payload, nothing to emit
+                break;
+
+            case MsgID.MSG_ACK_TELEM:
+                HandleAckTelem(connection, payload);
+                break;
+
+            case MsgID.MSG_BMS_EXT:
+                Emit(connection, new BmsExtMessage { Data = MemoryMarshal.Read<BmsExtPacket>(payload) });
+                break;
+
+            default:
+                // Unknown msgID — silently ignore (NЕ создаем новых MsgID!)
+                break;
+        }
+    }
+
+    private void Emit(ShuttleConnection connection, ShuttleMessageBase message)
+    {
+        _callbacks.OnMessage?.Invoke(connection.IpAddress, message);
+    }
+
+    // Обработка ACK_TELEM (compound: AckPacket + TelemetryPacket)
+    private void HandleAckTelem(ShuttleConnection connection, ReadOnlySpan<byte> payload)
+    {
+        var ackTelem = MemoryMarshal.Read<AckTelemPacket>(payload);
+
+        // Process the ACK part
+        if (_ackWaiters.TryRemove(ackTelem.Ack.RefSeq, out var tcs))
+            tcs.TrySetResult(ackTelem.Ack.Result == AckResult.ACK_OK);
+
+        // Emit both messages
+        Emit(connection, new AckMessage { Data = ackTelem.Ack });
+        Emit(connection, new TelemetryMessage { Data = ackTelem.Telemetry });
     }
 
     // Обработка ACK

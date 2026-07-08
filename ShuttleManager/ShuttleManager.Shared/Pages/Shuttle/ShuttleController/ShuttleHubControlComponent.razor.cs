@@ -408,7 +408,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
     {
         Shuttle.LastActivity = DateTime.Now;
         Shuttle.ErrorCode = (ShuttleFault)data.ErrorCode;
-        Shuttle.WarningCode = data.WaringCode;
+        Shuttle.WarningCode = data.WarningCode;
         Shuttle.CurrentStatus = ((ShuttleState)data.ShuttleStatus).ToString();
         Shuttle.Position = data.CurrentPosition;
         Shuttle.CurrentSpeed = data.Speed;
@@ -461,7 +461,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         Shuttle.MotorStallCount = data.MotorStallCount;
         Shuttle.LifterOverloadCount = data.LifterOverloadCount;
         Shuttle.CrashCount = data.CrashCount;
-        Shuttle.WatchdogResets = data.WatchdogResets;
+        Shuttle.WatchdogResets = data.ResetWatchdogCount;
         Shuttle.LowBatteryEvents = data.LowBatteryEvents;
     }
 
