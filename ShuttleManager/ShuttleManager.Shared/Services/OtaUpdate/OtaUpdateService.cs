@@ -11,7 +11,6 @@ public sealed class OtaUpdateService : IOtaUpdateService
     private const byte CMD_INIT = 0x01;
     private const byte CMD_ERASE = 0x02;
     private const byte CMD_RUN = 0x04;
-    private const byte CMD_WRITE_STREAM = 0x05;
     private const byte CMD_WRITE_CHUNK = 0x06;
 
     private const byte RESP_OK = 0xAA;
@@ -25,6 +24,17 @@ public sealed class OtaUpdateService : IOtaUpdateService
     private const int CHUNK_SIZE = 4096;
 
     private const int MAX_RETRIES = 5;
+
+    private const int CONNECT_TIMEOUT_MS = 10000;
+    private const int INIT_RESPONSE_TIMEOUT_MS = 5000;
+    private const int ERASE_RESPONSE_TIMEOUT_MS = 60000;
+    private const int STM_CHUNK_RESPONSE_TIMEOUT_MS = 30000;
+    private const int ESP_CHUNK_RESPONSE_TIMEOUT_MS = 10000;
+    private const int STM_RUN_RESPONSE_TIMEOUT_MS = 10000;
+    private const int ESP_RUN_RESPONSE_TIMEOUT_MS = 15000;
+
+    private const uint STM_CONFIG_SECTOR_BASE = 0x08060000;
+    private const uint STM_SMART_ERASE_LIMIT = STM_CONFIG_SECTOR_BASE - STM_BASE_ADDRESS;
 
     private readonly ILogger<OtaUpdateService> _logger;
 
@@ -45,6 +55,8 @@ public sealed class OtaUpdateService : IOtaUpdateService
             return OtaResult.Fail("Only .bin supported");
 
         var firmware = await File.ReadAllBytesAsync(filePath, token);
+        if (firmware.Length == 0)
+            return OtaResult.Fail("Firmware file is empty");
         var stopWatch = Stopwatch.StartNew();
 
         try
@@ -86,19 +98,24 @@ public sealed class OtaUpdateService : IOtaUpdateService
         CancellationToken token,
         bool fullErase)
     {
+        if (!fullErase && fw.Length > STM_SMART_ERASE_LIMIT)
+        {
+            return OtaResult.Fail($"STM firmware size {fw.Length} bytes overlaps preserved config sector at 0x{STM_CONFIG_SECTOR_BASE:X8}; enable full erase or move config storage.");
+        }
+
         using var client = new TcpClient();
         client.NoDelay = true;
         client.SendBufferSize = 64 * 1024;
 
         _logger.LogInformation("[STM] Connecting to {Ip}:{Port}...", ip, STM_PORT);
-        await client.ConnectAsync(ip, STM_PORT, token);
+        await ConnectAsync(client, ip, STM_PORT, token);
         using var stream = client.GetStream();
 
         // 1. INIT
         _logger.LogInformation("[STM] Sending CMD_INIT (Entering Bootloader/Syncing)...");
         stream.ReadTimeout = 5000;
         await SendByte(stream, CMD_INIT, token);
-        await EnsureOk(stream, token);
+        await EnsureOk(stream, token, INIT_RESPONSE_TIMEOUT_MS);
         _logger.LogInformation("[STM] Bootloader Initialized.");
 
         //// 2. ERASE
@@ -120,7 +137,7 @@ public sealed class OtaUpdateService : IOtaUpdateService
         byte[] erasePayload = [CMD_ERASE, fullErase ? (byte)0x01 : (byte)0x00];
         await stream.WriteAsync(erasePayload, token);
 
-        await EnsureOk(stream, token);
+        await EnsureOk(stream, token, ERASE_RESPONSE_TIMEOUT_MS);
         _logger.LogInformation("[STM] Flash Erased.");
 
         //// 3. CHUNKED WRITE WITH RETRIES
@@ -182,71 +199,66 @@ public sealed class OtaUpdateService : IOtaUpdateService
         //await SendByte(stream, CMD_RUN, token);
         //await EnsureOk(stream, token);
 
-        // 3. STREAM WRITE (Совместимо с ESP32 CMD_WRITE_STREAM = 0x05)
-        _logger.LogInformation("[STM] Starting Stream Firmware Upload...");
+        // 3. CHUNKED WRITE WITH RETRIES
+        _logger.LogInformation("[STM] Starting Chunked Firmware Upload...");
 
-        // 3.1 Формируем и отправляем заголовок стрима: [Команда 1B] [Адрес 4B] [Длина 4B]
-        byte[] streamHeader = new byte[9];
-        streamHeader[0] = CMD_WRITE_STREAM; // 0x05
-        BinaryPrimitives.WriteUInt32LittleEndian(streamHeader.AsSpan(1), STM_BASE_ADDRESS);
-        BinaryPrimitives.WriteUInt32LittleEndian(streamHeader.AsSpan(5), (uint)fw.Length);
-
-        await stream.WriteAsync(streamHeader, token);
-
-        // 3.2 ESP32 должна ответить RESP_OK (0xAA) на получение заголовка
-        stream.ReadTimeout = 5000;
-        await EnsureOk(stream, token);
-        _logger.LogInformation("[STM] Stream header accepted. Sending data...");
-
-        // 3.3 Отправляем саму прошивку кусками, чтобы не переполнить TCP-буфер
         int offset = 0;
-        int streamChunkSize = 4096; // Размер куска для отправки по сети
         int lastLogPercent = 0;
 
         while (offset < fw.Length)
         {
             token.ThrowIfCancellationRequested();
-            int len = Math.Min(streamChunkSize, fw.Length - offset);
+            int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
+            bool chunkSuccess = false;
 
-            await stream.WriteAsync(fw.AsMemory(offset, len), token);
+            for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
+            {
+                try
+                {
+                    stream.ReadTimeout = 10000;
+
+                    var header = new byte[7];
+                    header[0] = CMD_WRITE_CHUNK;
+                    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), STM_BASE_ADDRESS + (uint)offset);
+                    BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
+
+                    await stream.WriteAsync(header, token);
+                    await stream.WriteAsync(fw.AsMemory(offset, len), token);
+
+                    await EnsureOk(stream, token, STM_CHUNK_RESPONSE_TIMEOUT_MS);
+
+                    chunkSuccess = true;
+                    break;
+                }
+                catch (Exception ex) when (attempt < MAX_RETRIES)
+                {
+                    _logger.LogWarning("[STM] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
+                    await Task.Delay(500, token);
+                }
+            }
+
+            if (!chunkSuccess)
+                return OtaResult.Fail($"Failed at offset {offset}");
+
             offset += len;
-
             progress?.Report(new OtaProgress(offset, fw.Length));
 
             int percent = (int)((offset * 100) / fw.Length);
             if (percent - lastLogPercent >= 10)
             {
-                _logger.LogInformation("[STM] Streaming... {Percent}%", percent);
+                _logger.LogInformation("[STM] Uploading... {Percent}%", percent);
                 lastLogPercent = percent;
             }
-
-            // Небольшая пауза, чтобы ESP32 успевала переваривать данные в UART
-            await Task.Delay(10, token);
         }
 
-        //// 3.4 Ждем финального подтверждения от ESP32 после записи всей прошивки
-        //_logger.LogInformation("[STM] All data sent. Waiting for target to finish flashing...");
-        //stream.ReadTimeout = 60000; // Прошивка может занять время
-        //await EnsureOk(stream, token);
-        //_logger.LogInformation("[STM] Firmware Write Complete!");
-
-        //return OtaResult.Success();
-
-        // 3.4 Ждем финального подтверждения от ESP32 после записи всей прошивки
-        _logger.LogInformation("[STM] All data sent. Waiting for target to finish flashing...");
-        stream.ReadTimeout = 60000; // Прошивка может занять время
-        await EnsureOk(stream, token);
         _logger.LogInformation("[STM] Firmware Write Complete!");
 
-        // ================= ДОБАВИТЬ ЭТОТ БЛОК =================
-        // 4. ЗАПУСК ПРОШИВКИ (REBOOT)
+        // 4. RUN
         _logger.LogInformation("[STM] Sending CMD_RUN (Rebooting target)...");
         stream.ReadTimeout = 10000;
         await SendByte(stream, CMD_RUN, token);
-        await EnsureOk(stream, token);
+        await EnsureOk(stream, token, STM_RUN_RESPONSE_TIMEOUT_MS);
         _logger.LogInformation("[STM] Target Rebooted Successfully.");
-
-        //  =======================================================
         return OtaResult.Success();
     }
 
@@ -347,7 +359,7 @@ public sealed class OtaUpdateService : IOtaUpdateService
         client.SendBufferSize = 64 * 1024;
 
         _logger.LogInformation("[ESP] Connecting to {Ip}:{Port}...", ip, ESP_PORT);
-        await client.ConnectAsync(ip, ESP_PORT, token);
+        await ConnectAsync(client, ip, ESP_PORT, token);
         using var stream = client.GetStream();
 
         // 1. INIT (Упаковываем команду и размер в один TCP-пакет)
@@ -359,51 +371,65 @@ public sealed class OtaUpdateService : IOtaUpdateService
         BinaryPrimitives.WriteUInt32LittleEndian(initPayload.AsSpan(1), (uint)fw.Length);
 
         await stream.WriteAsync(initPayload, token);
-        await EnsureOk(stream, token);
+        await EnsureOk(stream, token, INIT_RESPONSE_TIMEOUT_MS);
         _logger.LogInformation("[ESP] Update.begin() successful.");
 
-        // 2. СТАРТ ПОТОКА (STREAM WRITE)
-        _logger.LogInformation("[ESP] Starting Stream Firmware Upload...");
+        _logger.LogInformation("[ESP] Starting Chunked Firmware Upload...");
 
-        byte[] streamHeader = new byte[5];
-        streamHeader[0] = CMD_WRITE_STREAM; // 0x05
-        BinaryPrimitives.WriteUInt32LittleEndian(streamHeader.AsSpan(1), (uint)fw.Length);
-
-        await stream.WriteAsync(streamHeader, token);
-        await EnsureOk(stream, token);
-        _logger.LogInformation("[ESP] Stream header accepted. Sending data...");
-
-        // 3. ОТПРАВКА ДАННЫХ
         int offset = 0;
-        int streamChunkSize = 4096; // Размер блока для передачи по сети
         int lastLogPercent = 0;
 
         while (offset < fw.Length)
         {
             token.ThrowIfCancellationRequested();
-            int len = Math.Min(streamChunkSize, fw.Length - offset);
+            int len = Math.Min(CHUNK_SIZE, fw.Length - offset);
+            bool chunkSuccess = false;
 
-            await stream.WriteAsync(fw.AsMemory(offset, len), token);
+            for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
+            {
+                try
+                {
+                    stream.ReadTimeout = 10000;
+
+                    var header = new byte[7];
+                    header[0] = CMD_WRITE_CHUNK;
+                    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(1), (uint)offset);
+                    BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(5), (ushort)len);
+
+                    await stream.WriteAsync(header, token);
+                    await stream.WriteAsync(fw.AsMemory(offset, len), token);
+
+                    await EnsureOk(stream, token, ESP_CHUNK_RESPONSE_TIMEOUT_MS);
+
+                    chunkSuccess = true;
+                    break;
+                }
+                catch (Exception ex) when (attempt < MAX_RETRIES)
+                {
+                    _logger.LogWarning("[ESP] Chunk at offset {Offset} failed (Attempt {Attempt}/{Max}): {Msg}", offset, attempt, MAX_RETRIES, ex.Message);
+                    await Task.Delay(500, token);
+                }
+            }
+
+            if (!chunkSuccess)
+                return OtaResult.Fail($"Failed at offset {offset}");
+
             offset += len;
-
             progress?.Report(new OtaProgress(offset, fw.Length));
 
             int percent = (int)((offset * 100) / fw.Length);
             if (percent - lastLogPercent >= 10)
             {
-                _logger.LogInformation("[ESP] Streaming... {Percent}%", percent);
+                _logger.LogInformation("[ESP] Uploading... {Percent}%", percent);
                 lastLogPercent = percent;
             }
-
-            // Небольшая задержка, чтобы внутренний процесс записи во flash-память ESP32 успевал
-            await Task.Delay(10, token);
         }
 
         // 4. ЗАПУСК ПРОШИВКИ (REBOOT)
         _logger.LogInformation("[ESP] All data sent. Sending CMD_RUN (Finalizing & Restarting)...");
         stream.ReadTimeout = 15000; // Финализация (Update.end) может занять пару секунд
         await SendByte(stream, CMD_RUN, token);
-        await EnsureOk(stream, token);
+        await EnsureOk(stream, token, ESP_RUN_RESPONSE_TIMEOUT_MS);
         _logger.LogInformation("[ESP] Target Rebooted Successfully.");
 
         return OtaResult.Success();
@@ -431,10 +457,37 @@ public sealed class OtaUpdateService : IOtaUpdateService
         await stream.WriteAsync(buffer, token);
     }
 
-    private static async Task EnsureOk(NetworkStream stream, CancellationToken token)
+    private static async Task ConnectAsync(TcpClient client, string ip, int port, CancellationToken token)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeoutCts.CancelAfter(CONNECT_TIMEOUT_MS);
+
+        try
+        {
+            await client.ConnectAsync(ip, port, timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Timed out connecting to {ip}:{port} after {CONNECT_TIMEOUT_MS} ms");
+        }
+    }
+
+    private static async Task EnsureOk(NetworkStream stream, CancellationToken token, int timeoutMs)
     {
         var buffer = new byte[1];
-        int read = await stream.ReadAsync(buffer, token);
+        int read;
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeoutCts.CancelAfter(timeoutMs);
+
+        try
+        {
+            read = await stream.ReadAsync(buffer, timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Timed out waiting for OTA response after {timeoutMs} ms");
+        }
 
         if (read != 1 || buffer[0] != RESP_OK)
         {
