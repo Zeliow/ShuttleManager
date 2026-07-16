@@ -1,18 +1,23 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace ShuttleManager.Shared.Models.Protocol;
 
-// --- Protocol Constants V2 ---
+// --- Protocol Constants V5 ---
 public static class ProtocolConstants
 {
     public const byte PROTOCOL_SYNC_1_V2 = 0xBB;
     public const byte PROTOCOL_SYNC_2_V2 = 0xCC;
-    public const byte PROTOCOL_VER = 2;
+    public const byte PROTOCOL_VER = 5;
 
     public const byte TARGET_ID_NONE = 0x00;
     public const byte TARGET_ID_BROADCAST = 0xFF;
 
-    public const byte MAX_LOG_STRING_LEN = 55;
+    public const byte PROTOCOL_CRC_SIZE = 2;
+    public const byte PROTOCOL_MAX_FRAME_SIZE = 128;
+    public const byte LOG_LEVEL_FIELD_SIZE = 1;
+
+    // MAX_LOG_STRING_LEN = PROTOCOL_MAX_FRAME_SIZE - sizeof(FrameHeader) - PROTOCOL_CRC_SIZE - LOG_LEVEL_FIELD_SIZE
+    public const byte MAX_LOG_STRING_LEN = 119;
     public const byte LOG_MAX_PRINTABLE_CHARS = MAX_LOG_STRING_LEN - 1;
 }
 
@@ -50,6 +55,16 @@ public enum MsgID : byte
     /// Request stats
     /// </summary>
     MSG_REQ_STATS = 0x06,
+
+    /// <summary>
+    /// Radio link diagnostics
+    /// </summary>
+    MSG_LINK_HEALTH = 0x07,
+
+    /// <summary>
+    /// Request radio link diagnostics
+    /// </summary>
+    MSG_REQ_LINK_HEALTH = 0x08,
 
     // Asynchronous
 
@@ -111,6 +126,39 @@ public enum MsgID : byte
     /// Acknowledgment
     /// </summary>
     MSG_ACK = 0x33,
+
+    /// <summary>
+    /// Reserved for future extended battery telemetry
+    /// </summary>
+    MSG_BMS_EXT = 0x34,
+
+    /// <summary>
+    /// Compound ACK + Telemetry
+    /// </summary>
+    MSG_ACK_TELEM = 0x35,
+}
+
+// --- Message flag constants ---
+
+/// <summary>
+/// Message flag constants — placed in the MSB of msgID to control ACK/telemetry behavior.
+/// </summary>
+public static class MsgFlags
+{
+    /// <summary>
+    /// Flag placed in the MSB of msgID to suppress ACKs for volatile commands
+    /// </summary>
+    public const byte MSG_FLAG_NO_ACK = 0x80;
+
+    /// <summary>
+    /// Flag to instruct the Shuttle to append telemetry to the ACK
+    /// </summary>
+    public const byte MSG_FLAG_REQ_TELEM = 0x40;
+
+    /// <summary>
+    /// Mask to extract the real MsgID (masks out both top flag bits)
+    /// </summary>
+    public const byte MSG_ID_MASK = 0x3F;
 }
 
 // --- Enums ---
@@ -166,6 +214,26 @@ public enum ShuttleFault : ushort
     FAULT_TOF_PAL_R = 1 << 4,
 
     /// <summary>
+    /// Bumper front 1 fault
+    /// </summary>
+    FAULT_BUMPER_F1 = 1 << 5,
+
+    /// <summary>
+    /// Bumper front 2 fault
+    /// </summary>
+    FAULT_BUMPER_F2 = 1 << 6,
+
+    /// <summary>
+    /// Bumper rear 1 fault
+    /// </summary>
+    FAULT_BUMPER_R1 = 1 << 7,
+
+    /// <summary>
+    /// Bumper rear 2 fault
+    /// </summary>
+    FAULT_BUMPER_R2 = 1 << 8,
+
+    /// <summary>
     /// Lifter timeout
     /// </summary>
     FAULT_LIFTER_TIMEOUT = 1 << 9,
@@ -181,14 +249,102 @@ public enum ShuttleFault : ushort
     FAULT_LOW_BATTERY = 1 << 11,
 
     /// <summary>
-    /// Crash bumper triggered
-    /// </summary>
-    FAULT_CRASH_BUMPER = 1 << 12,
-
-    /// <summary>
     /// Move timeout
     /// </summary>
     FAULT_MOVE_TIMEOUT = 1 << 13,
+}
+
+[Flags]
+public enum ShuttleWarning : ushort
+{
+    /// <summary>
+    /// No warning
+    /// </summary>
+    WARN_NONE = 0x0000,
+
+    /// <summary>
+    /// Pallet not found
+    /// </summary>
+    WARN_PALLET_NOT_FOUND = 1 << 0,
+
+    /// <summary>
+    /// Channel is full
+    /// </summary>
+    WARN_CHANNEL_FULL = 1 << 1,
+
+    /// <summary>
+    /// Not in channel
+    /// </summary>
+    WARN_NOT_IN_CHANNEL = 1 << 2,
+
+    /// <summary>
+    /// Pallet size error
+    /// </summary>
+    WARN_PALLET_SIZE_ERROR = 1 << 3,
+
+    /// <summary>
+    /// End of channel
+    /// </summary>
+    WARN_END_OF_CHANNEL = 1 << 4,
+
+    /// <summary>
+    /// Manual mode timeout
+    /// </summary>
+    WARN_MANUAL_TIMEOUT = 1 << 5,
+
+    /// <summary>
+    /// I2C recovery event
+    /// </summary>
+    WARN_I2C_RECOVERY = 1 << 6,
+
+    /// <summary>
+    /// Obstacle detected ahead
+    /// </summary>
+    WARN_OBSTACLE_AHEAD = 1 << 7,
+}
+
+[Flags]
+public enum ResetReasonFlags : uint
+{
+    /// <summary>
+    /// No reset reason
+    /// </summary>
+    RESET_REASON_NONE = 0x00000000U,
+
+    /// <summary>
+    /// Watchdog reset
+    /// </summary>
+    RESET_REASON_WATCHDOG = 0x00000001U,
+
+    /// <summary>
+    /// Software reset
+    /// </summary>
+    RESET_REASON_SOFTWARE = 0x00000002U,
+
+    /// <summary>
+    /// Bootloader request reset
+    /// </summary>
+    RESET_REASON_BOOTLOADER_REQUEST = 0x00000004U,
+
+    /// <summary>
+    /// Pin reset
+    /// </summary>
+    RESET_REASON_PIN = 0x00000008U,
+
+    /// <summary>
+    /// Power-on reset
+    /// </summary>
+    RESET_REASON_POWER = 0x00000010U,
+
+    /// <summary>
+    /// Low power reset
+    /// </summary>
+    RESET_REASON_LOW_POWER = 0x00000020U,
+
+    /// <summary>
+    /// Unknown reset reason
+    /// </summary>
+    RESET_REASON_UNKNOWN = 0x80000000U,
 }
 
 public enum CmdType : byte
@@ -515,6 +671,28 @@ public enum ConfigParamID : byte
     /// </summary>
     CFG_REVERSE_MODE = 10,
 }
+// --- HW Flag Bitmask Constants ---
+public static class HwFlags
+{
+    public const ushort HW_FLAG_PALLET_F1 = (ushort)(1U << 0);
+    public const ushort HW_FLAG_PALLET_F2 = (ushort)(1U << 1);
+    public const ushort HW_FLAG_PALLET_R1 = (ushort)(1U << 2);
+    public const ushort HW_FLAG_PALLET_R2 = (ushort)(1U << 3);
+    public const ushort HW_FLAG_BUMPER_F1 = (ushort)(1U << 4);
+    public const ushort HW_FLAG_BUMPER_F2 = (ushort)(1U << 5);
+    public const ushort HW_FLAG_BUMPER_R1 = (ushort)(1U << 6);
+    public const ushort HW_FLAG_BUMPER_R2 = (ushort)(1U << 7);
+    public const ushort HW_FLAG_LIFTER_UP = (ushort)(1U << 8);
+    public const ushort HW_FLAG_LIFTER_DOWN = (ushort)(1U << 9);
+}
+// --- Link Health Flag Bitmask Constants ---
+public static class LinkHealthFlags
+{
+    public const byte LINK_HEALTH_RSSI_VALID = (byte)(1 << 0);
+    public const byte LINK_HEALTH_RADIO_CONFIG_OK = (byte)(1 << 1);
+    public const byte LINK_HEALTH_AUX_HIGH = (byte)(1 << 2);
+    public const byte LINK_HEALTH_AUX_PRESENT = (byte)(1 << 3);
+}
 
 // --- Structs ---
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -532,7 +710,7 @@ public struct FrameHeader
 public struct TelemetryPacket
 {
     public ushort ErrorCode;
-    public ushort WaringCode;
+    public ushort WarningCode;
     public ushort CurrentPosition;  // mm
     public ushort Speed;
     public ushort BatteryVoltage_mV; // 12500 = 12.5V
@@ -570,8 +748,13 @@ public struct StatsPacket
     public ushort MotorStallCount;
     public ushort LifterOverloadCount;
     public ushort CrashCount;
-    public ushort WatchdogResets;
+    public ushort ResetWatchdogCount;
+    public ushort ResetSoftwareCount;
+    public ushort ResetPinCount;
+    public ushort ResetPowerCount;
+    public ushort ResetOtherCount;
     public ushort LowBatteryEvents;
+    public uint LastResetFlags;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -624,8 +807,7 @@ public struct DateTimePacket
 public struct LogPacket
 {
     public byte LogLevel;
-
-    // char message[MAX_LOG_STRING_LEN]; // Null terminated via vsnprintf
+    // char message[MAX_LOG_STRING_LEN]; // Variable-length; read as raw string after level byte
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -633,4 +815,69 @@ public struct AckPacket
 {
     public byte RefSeq;
     public AckResult Result;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct LinkHealthPacket
+{
+    public short PacketRssiDbm;
+    public byte PacketRssiRaw;
+    public byte Flags;
+    public uint PacketRssiAgeMs;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct AckTelemPacket
+{
+    public AckPacket Ack;           // 2 bytes
+    public TelemetryPacket Telemetry; // 16 bytes
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct BmsExtPacket
+{
+    public ushort PackVoltage_mV;
+    public short PackCurrent_cA;
+    public ushort RemainCapacity_cAh;
+    public ushort NominalCapacity_cAh;
+    public ushort CycleCount;
+    public ushort ProtectionFlags;
+    public byte FetStatus;
+    public byte SocPercent;
+    public byte CellCount;
+    public ushort CellMin_mV;
+    public ushort CellMax_mV;
+    public ushort CellDelta_mV;
+    public byte NtcCount;
+    public short NtcTemp0_dC;
+    public short NtcTemp1_dC;
+    public short NtcTemp2_dC;
+    public short NtcTemp3_dC;
+}
+
+// --- Wire-size assertions (mirrors C static_assert) ---
+public static class ProtocolSizeVerifier
+{
+    public static void AssertSizes()
+    {
+        const int HeaderSize = 6;
+
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<TelemetryPacket>() == 16, "TelemetryPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<SensorPacket>() == 16, "SensorPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<StatsPacket>() == 54, "StatsPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<AckTelemPacket>() == 18, "AckTelemPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<LinkHealthPacket>() == 8, "LinkHealthPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<FullConfigPacket>() == 16, "FullConfigPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<ConfigPacket>() == 5, "ConfigPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<SimpleCmdPacket>() == 1, "SimpleCmdPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<ParamCmdPacket>() == 5, "ParamCmdPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<DateTimePacket>() == 6, "DateTimePacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<AckPacket>() == 2, "AckPacket wire size mismatch");
+        System.Diagnostics.Debug.Assert(Marshal.SizeOf<FrameHeader>() == HeaderSize, "FrameHeader wire size mismatch");
+
+        // Check that header + LinkHealth + CRC fits within 64-byte parser buffer
+        System.Diagnostics.Debug.Assert(
+            HeaderSize + Marshal.SizeOf<LinkHealthPacket>() + ProtocolConstants.PROTOCOL_CRC_SIZE <= 64,
+            "LinkHealthPacket exceeds parser buffer");
+    }
 }

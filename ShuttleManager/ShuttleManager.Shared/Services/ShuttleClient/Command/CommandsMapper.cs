@@ -21,6 +21,7 @@ public static class BinaryCommandMapper
             ShuttleCommand.LiftUp => CmdType.CMD_LIFT_UP,
             ShuttleCommand.LiftDown => CmdType.CMD_LIFT_DOWN,
             ShuttleCommand.Calibrate => CmdType.CMD_CALIBRATE,
+            ShuttleCommand.Home => CmdType.CMD_HOME,
             ShuttleCommand.SealForward => CmdType.CMD_COMPACT_F,
             ShuttleCommand.SealBackward => CmdType.CMD_COMPACT_R,
             ShuttleCommand.Left => CmdType.CMD_MOVE_LEFT_MAN,
