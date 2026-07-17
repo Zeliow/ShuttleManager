@@ -124,7 +124,13 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
             string correctNum;
             try
             {
-                correctNum = shuttleNums[int.Parse(ipAddress[^3..]) - 131];
+                int lastOctet = int.Parse(ipAddress.Substring(ipAddress.LastIndexOf('.') + 1));
+                if (lastOctet == 130)
+                    correctNum = shuttleNums[0];
+                else if (lastOctet >= 131 && lastOctet < 131 + shuttleNums.Length)
+                    correctNum = shuttleNums[lastOctet - 131];
+                else
+                    correctNum = lastOctet.ToString();
             }
             catch
             {

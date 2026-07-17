@@ -138,13 +138,19 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
             connection.Transport = new TcpConnection(tcpClient);
 
-            if (int.Parse(ipAddress.Substring(ipAddress.LastIndexOf('.') + 1)) == 130)
+            int lastOctet = int.Parse(ipAddress.Substring(ipAddress.LastIndexOf('.') + 1));
+            if (lastOctet == 130)
             {
                 connection.ShuttleId = shuttleNums[0];
             }
+            else if (lastOctet >= 131 && lastOctet < 131 + shuttleNums.Length)
+            {
+                connection.ShuttleId = shuttleNums[lastOctet - 131];
+            }
             else
             {
-                connection.ShuttleId = shuttleNums[int.Parse(ipAddress.Remove(0, ipAddress.Length - 3)) - 131];
+                // Unprovisioned or unknown IP range — use IP octet as identifier
+                connection.ShuttleId = lastOctet.ToString();
             }
 
             OnConnected(ipAddress, connection.ShuttleId);
