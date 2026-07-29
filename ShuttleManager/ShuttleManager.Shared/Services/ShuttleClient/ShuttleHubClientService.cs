@@ -1,14 +1,14 @@
-﻿using ShuttleManager.Shared.Interfaces;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.BinaryService;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 using ShuttleManager.Shared.Services.ShuttleClient.LegacyService;
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient;
 
@@ -133,8 +133,8 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             await tcpClient.ConnectAsync(ipAddress, port);
 
             tcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 60);
+            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 5);
+            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 5);
             tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 1);
             connection.Transport = new TcpConnection(tcpClient);
 
