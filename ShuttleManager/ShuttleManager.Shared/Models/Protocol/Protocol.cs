@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace ShuttleManager.Shared.Models.Protocol;
 
@@ -18,6 +18,7 @@ public static class ProtocolConstants
 
     // MAX_LOG_STRING_LEN = PROTOCOL_MAX_FRAME_SIZE - sizeof(FrameHeader) - PROTOCOL_CRC_SIZE - LOG_LEVEL_FIELD_SIZE
     public const byte MAX_LOG_STRING_LEN = 119;
+
     public const byte LOG_MAX_PRINTABLE_CHARS = MAX_LOG_STRING_LEN - 1;
 }
 
@@ -146,17 +147,17 @@ public enum MsgID : byte
 public static class MsgFlags
 {
     /// <summary>
-    /// Flag placed in the MSB of msgID to suppress ACKs for volatile commands
+    /// Flag placed in the MSB of msgID to suppress ACKs for volatile commands.
     /// </summary>
     public const byte MSG_FLAG_NO_ACK = 0x80;
 
     /// <summary>
-    /// Flag to instruct the Shuttle to append telemetry to the ACK
+    /// Flag to instruct the Shuttle to append telemetry to the ACK.
     /// </summary>
     public const byte MSG_FLAG_REQ_TELEM = 0x40;
 
     /// <summary>
-    /// Mask to extract the real MsgID (masks out both top flag bits)
+    /// Mask to extract the real MsgID (masks out both top flag bits).
     /// </summary>
     public const byte MSG_ID_MASK = 0x3F;
 }
@@ -671,6 +672,7 @@ public enum ConfigParamID : byte
     /// </summary>
     CFG_REVERSE_MODE = 10,
 }
+
 // --- HW Flag Bitmask Constants ---
 public static class HwFlags
 {
@@ -685,6 +687,7 @@ public static class HwFlags
     public const ushort HW_FLAG_LIFTER_UP = (ushort)(1U << 8);
     public const ushort HW_FLAG_LIFTER_DOWN = (ushort)(1U << 9);
 }
+
 // --- Link Health Flag Bitmask Constants ---
 public static class LinkHealthFlags
 {
@@ -807,6 +810,7 @@ public struct DateTimePacket
 public struct LogPacket
 {
     public byte LogLevel;
+
     // char message[MAX_LOG_STRING_LEN]; // Variable-length; read as raw string after level byte
 }
 
