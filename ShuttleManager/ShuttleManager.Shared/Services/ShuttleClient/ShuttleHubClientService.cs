@@ -189,7 +189,6 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
                     await InternalDisconnectAsync(connection.IpAddress);
                     break;
                 }
-
                 connection.ReceiveBuffer.Write(buffer, 0, bytesRead);
 
                 if (connection.Protocol == ShuttleProtocolType.Unknown)
@@ -203,7 +202,12 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ShuttleHubClientService] Ошибка приёма от {connection.IpAddress}: {ex.Message}");
+                Debug.WriteLine(
+       $"[ShuttleHubClientService] Ошибка приёма от {connection.IpAddress}\n" +
+       $"Bytes in ReceiveBuffer: {connection.ReceiveBuffer.Length}\n" +
+       $"Protocol: {connection.Protocol}\n" +
+       $"Exception:\n{ex}");
+                //Debug.WriteLine($"[ShuttleHubClientService] Ошибка приёма от {connection.IpAddress}: {ex.Message}");
                 await InternalDisconnectAsync(connection.IpAddress);
                 break;
             }

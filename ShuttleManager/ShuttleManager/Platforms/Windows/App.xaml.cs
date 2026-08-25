@@ -31,7 +31,7 @@ namespace ShuttleManager.WinUI
             var window = Application.Windows.FirstOrDefault() as Microsoft.Maui.Controls.Window;
             if (window != null)
             {
-                window.Title = "Менеджер шаттлов B.V.5.4";
+                window.Title = "Менеджер шаттлов B.V.5.5(test add server data)";
 
                 var nativeWindow = window.Handler.PlatformView as Microsoft.UI.Xaml.Window;
                 if (nativeWindow != null)
@@ -42,7 +42,7 @@ namespace ShuttleManager.WinUI
 
                     if (appWindow != null)
                     {
-                        appWindow.Title = "Менеджер шаттлов B.V.5.3.3";
+                        appWindow.Title = "Менеджер шаттлов B.V.5.5(test add server data)";
 
                         var presenter = appWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
                         if (presenter != null)
