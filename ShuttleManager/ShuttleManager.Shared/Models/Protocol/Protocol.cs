@@ -740,7 +740,9 @@ public struct SensorPacket
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct StatsPacket
 {
+    //V1 struct of Stats
     public uint TotalDist;
+
     public uint LoadCounter;
     public uint UnloadCounter;
     public uint CompactCounter;
@@ -752,12 +754,15 @@ public struct StatsPacket
     public ushort LifterOverloadCount;
     public ushort CrashCount;
     public ushort ResetWatchdogCount;
-    public ushort ResetSoftwareCount;
-    public ushort ResetPinCount;
-    public ushort ResetPowerCount;
-    public ushort ResetOtherCount;
     public ushort LowBatteryEvents;
-    public uint LastResetFlags;
+
+    //new addition V2 struct of Stats
+    //=================================
+    // public ushort ResetSoftwareCount;
+    // public ushort ResetPinCount;
+    // public ushort ResetPowerCount;
+    // public ushort ResetOtherCount;
+    // public uint LastResetFlags;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]

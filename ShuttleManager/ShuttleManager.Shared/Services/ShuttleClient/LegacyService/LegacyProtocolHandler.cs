@@ -1,5 +1,6 @@
-﻿using System.Diagnostics;
-using System.Text;
+﻿using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Models.Protocol;
@@ -7,18 +8,21 @@ using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.Command;
 using ShuttleManager.Shared.Services.ShuttleClient.Config;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
+using ProtocolLogLevel = ShuttleManager.Shared.Models.Protocol.LogLevel;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.LegacyService;
 
 public class LegacyProtocolHandler : IShuttleProtocolHandler
 {
     private readonly ProtocolCallbacks _callbacks;
+    private readonly ILogger<LegacyProtocolHandler> _logger;
 
     public ShuttleProtocolType Protocol => ShuttleProtocolType.Legacy;
 
-    public LegacyProtocolHandler(ProtocolCallbacks callbacks)
+    public LegacyProtocolHandler(ProtocolCallbacks callbacks, ILogger<LegacyProtocolHandler>? logger = null)
     {
         _callbacks = callbacks;
+        _logger = logger ?? NullLogger<LegacyProtocolHandler>.Instance;
     }
 
     // Разбор буфера Legacy (строковый протокол)
@@ -58,7 +62,7 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         // Всегда добавляем raw пакет
         var raw = new RawLogMessage
         {
-            Level = LogLevel.LOG_INFO,
+            Level = ProtocolLogLevel.LOG_INFO,
             Text = line,
         };
         messages.Add(raw);
@@ -71,7 +75,7 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
 
     private async Task<bool> SendPacketAsync(ShuttleConnection connection, string text, CancellationToken cancellationToken)
     {
-        Debug.WriteLine($"Shuttle Connection: {connection}; Command: {text}");
+        _logger.LogDebug("Отправка команды {ShuttleId}: {Command}", connection.ShuttleId, text);
         if (!text.EndsWith("\n"))
             text += "\n";
         var data = Encoding.UTF8.GetBytes(text);
@@ -87,19 +91,20 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
             return false;
 
         var text = LegacyCommandMapper.Map(connection.ShuttleId, cmd, arg1);
+        _logger.LogInformation("Отправка команды {ShuttleId}: {Command}", connection.ShuttleId, text);
 
         return await SendPacketAsync(connection, text, ct);
     }
 
     public async Task<bool> SendConfigAsync(ShuttleConnection connection, ShuttleConfigCommand param, int value, int timeoutMs = 1000)
     {
-        Debug.WriteLine($"#1. Текущее состояние  ID: {connection.ShuttleId}");
+        _logger.LogInformation("Отправка конфигурации Id: {ShuttleId} value: {Value}", connection.ShuttleId, value);
         var text = LegacyConfigMapper.Map(connection.ShuttleId, param, value);
+
+        _logger.LogInformation("Отправка конфигурации {ShuttleId}: {Command}", connection.ShuttleId, text);
 
         if (param == ShuttleConfigCommand.ShuttleNumber)
             connection.ShuttleId = Convert.ToString(value);
-
-        Debug.WriteLine($"#2. Текущее состояние  ID: {connection.ShuttleId}");
 
         return await SendPacketAsync(connection, text, CancellationToken.None);
     }

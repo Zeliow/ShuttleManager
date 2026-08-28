@@ -24,8 +24,7 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
     protected List<Models.Shuttle> _connectedShuttles = new();
     protected int activeTabIndex = -1;
     protected Timer? _cleanupTimer;
-
-    protected string[] shuttleNums = ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32"];
+    protected CancellationTokenSource? _scanCts;
 
     // Dark theme
     protected ElementReference toggleElement;
@@ -97,12 +96,34 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
         isScanning = true;
         scanCompleted = false;
         foundDevices.Clear();
+        _scanCts?.Dispose();
+        _scanCts = new CancellationTokenSource();
 
         StateHasChanged();
 
         try
         {
-            foundDevices = await HubClientService.ScanNetworkAsync(baseIp, startRange, endRange, port, 1000);
+            var progress = new Progress<IPAddress>(ip => InvokeAsync(() =>
+            {
+                if (!foundDevices.Contains(ip))
+                {
+                    foundDevices.Add(ip);
+                    StateHasChanged();
+                }
+            }));
+
+            foundDevices = await HubClientService.ScanNetworkAsync(
+                baseIp,
+                startRange,
+                endRange,
+                port,
+                1000,
+                _scanCts.Token,
+                progress);
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("Сканирование отменено");
         }
         catch (Exception ex)
         {
@@ -121,22 +142,6 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
     {
         InvokeAsync(() =>
         {
-            string correctNum;
-            try
-            {
-                int lastOctet = int.Parse(ipAddress.Substring(ipAddress.LastIndexOf('.') + 1));
-                if (lastOctet == 130)
-                    correctNum = shuttleNums[0];
-                else if (lastOctet >= 131 && lastOctet < 131 + shuttleNums.Length)
-                    correctNum = shuttleNums[lastOctet - 131];
-                else
-                    correctNum = lastOctet.ToString();
-            }
-            catch
-            {
-                correctNum = shuttleNums[0];
-            }
-
             if (!_connectedShuttles.Any(s => s.IPAddress == ipAddress))
             {
                 var newShuttle = new Models.Shuttle
@@ -145,7 +150,7 @@ public partial class ShuttlesPage : ComponentBase, IAsyncDisposable
                     IsConnected = true,
                     ConnectionTime = DateTime.Now,
                     LastActivity = DateTime.Now,
-                    ShuttleNumber = correctNum,
+                    ShuttleNumber = shuttleId,
                 };
 
                 _connectedShuttles.Add(newShuttle);

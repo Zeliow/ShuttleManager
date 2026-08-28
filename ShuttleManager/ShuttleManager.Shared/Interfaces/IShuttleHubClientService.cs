@@ -13,9 +13,11 @@ public interface IShuttleHubClientService
 
     event Action<string>? Disconnected;                // Передаёт IP
 
-    public Task ConnectToShuttleAsync(string ipAddress, int port);
+    event Action<string>? Reconnecting;                // Передаёт IP при попытке авто-реконнекта
 
-    public void DisconnectFromShuttle(string ipAddress);
+    public Task<bool> ConnectToShuttleAsync(string ipAddress, int port);
+
+    public Task DisconnectAsync(string ipAddress);
 
     public Task<bool> SendCommandAsync(string ip, ShuttleCommand command, int arg1 = 0, int arg2 = 0);
 
@@ -29,5 +31,12 @@ public interface IShuttleHubClientService
 
     List<Shuttle> GetConnectedShuttles();
 
-    public Task<List<IPAddress>> ScanNetworkAsync(string baseIp, int startIp, int endIp, int port, int timeoutMs = 1000);
+    public Task<List<IPAddress>> ScanNetworkAsync(
+        string baseIp,
+        int startIp,
+        int endIp,
+        int port,
+        int timeoutMs = 1000,
+        CancellationToken ct = default,
+        IProgress<IPAddress>? progress = null);
 }

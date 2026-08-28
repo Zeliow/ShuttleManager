@@ -1,9 +1,7 @@
-﻿using System.Buffers.Binary;
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net.Sockets;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Messages;
@@ -12,29 +10,21 @@ using ShuttleManager.Shared.Services.Enums;
 using ShuttleManager.Shared.Services.ShuttleClient.Command;
 using ShuttleManager.Shared.Services.ShuttleClient.Config;
 using ShuttleManager.Shared.Services.ShuttleClient.Helpers;
+using ProtocolLogLevel = ShuttleManager.Shared.Models.Protocol.LogLevel;
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.BinaryService;
 
 public class BinaryProtocolHandler : IShuttleProtocolHandler
 {
-    private const byte PROTOCOL_SYNC_1_V2 = 0xBB;
-    private const byte PROTOCOL_SYNC_2_V2 = 0xCC;
-    private const int MAX_PAYLOAD_SIZE = 120;
-
     private readonly ProtocolCallbacks _callbacks;
-    private readonly ConcurrentDictionary<byte, TaskCompletionSource<bool>> _ackWaiters;
-    private readonly object _lock;
+    private readonly ILogger<BinaryProtocolHandler> _logger;
 
     public ShuttleProtocolType Protocol => ShuttleProtocolType.Binary;
 
-    public BinaryProtocolHandler(
-        ProtocolCallbacks callbacks,
-        ConcurrentDictionary<byte, TaskCompletionSource<bool>> ackWaiters,
-        object hubLock)
+    public BinaryProtocolHandler(ProtocolCallbacks callbacks, ILogger<BinaryProtocolHandler>? logger = null)
     {
         _callbacks = callbacks;
-        _ackWaiters = ackWaiters;
-        _lock = hubLock;
+        _logger = logger ?? NullLogger<BinaryProtocolHandler>.Instance;
     }
 
     // Обработка входящего буфера
@@ -46,67 +36,42 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
 
         while (offset < data.Length)
         {
-            int syncIndex = -1;
-            for (int i = offset; i < data.Length - 1; i++)
+            FrameParseResult result = BinaryFrameCodec.TryParseFrame(data, offset, out ParsedFrame frame, out int nextOffset);
+
+            if (result == FrameParseResult.NoSync)
             {
-                if (data[i] == PROTOCOL_SYNC_1_V2 && data[i + 1] == PROTOCOL_SYNC_2_V2)
+                break;
+            }
+
+            if (result == FrameParseResult.Incomplete)
+            {
+                offset = nextOffset;
+                break;
+            }
+
+            if (result == FrameParseResult.Ok)
+            {
+                try
                 {
-                    syncIndex = i;
-                    break;
+                    HandleBinaryMessage(connection, (MsgID)frame.MsgId, frame.Payload.Span, frame.Seq);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка обработки сообщения {MsgId} от {Ip}", frame.MsgId, connection.IpAddress);
                 }
             }
 
-            if (syncIndex == -1)
-                break;
-
-            if (data.Length - syncIndex < 6)
-            {
-                offset = syncIndex;
-                break;
-            }
-
-            byte msgId = data[syncIndex + 2];
-            byte targetId = data[syncIndex + 3];
-            byte seq = data[syncIndex + 4];
-            byte payloadLength = data[syncIndex + 5];
-
-            if (payloadLength > MAX_PAYLOAD_SIZE)
-            {
-                offset = syncIndex + 2;
-                processedAny = true;
-                continue;
-            }
-
-            int totalFrameSize = 6 + payloadLength + 2;
-            if (data.Length - syncIndex < totalFrameSize)
-            {
-                offset = syncIndex;
-                break;
-            }
-
-            ushort receivedCrc = BinaryPrimitives.ReadUInt16LittleEndian(
-                data.AsSpan(syncIndex + 6 + payloadLength, 2));
-            ushort calculatedCrc = Crc16Ccitt(data.AsSpan(syncIndex, 6 + payloadLength));
-
-            if (receivedCrc == calculatedCrc)
-            {
-                var payload = data.AsSpan(syncIndex + 6, payloadLength);
-                HandleBinaryMessage(connection, (MsgID)msgId, payload, seq);
-                offset = syncIndex + totalFrameSize;
-                processedAny = true;
-            }
-            else
-            {
-                offset = syncIndex + 2;
-                processedAny = true;
-            }
+            offset = nextOffset;
+            processedAny = true;
         }
 
         if (processedAny)
         {
             connection.ReceiveBuffer.SetLength(0);
             if (offset < data.Length)
+            {
                 connection.ReceiveBuffer.Write(data, offset, data.Length - offset);
+            }
         }
     }
 
@@ -120,37 +85,44 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         switch (msgId)
         {
             case MsgID.MSG_HEARTBEAT:
-                Emit(connection, new TelemetryMessage { Data = MemoryMarshal.Read<TelemetryPacket>(payload) });
+                if (TryReadStruct(payload, out TelemetryPacket telemetry))
+                    Emit(connection, new TelemetryMessage { Data = telemetry });
                 break;
 
             case MsgID.MSG_SENSORS:
-                Emit(connection, new SensorMessage { Data = MemoryMarshal.Read<SensorPacket>(payload) });
+                if (TryReadStruct(payload, out SensorPacket sensors))
+                    Emit(connection, new SensorMessage { Data = sensors });
                 break;
 
             case MsgID.MSG_STATS:
-                Emit(connection, new StatsMessage { Data = MemoryMarshal.Read<StatsPacket>(payload) });
+                if (TryReadStruct(payload, out StatsPacket stats))
+                    Emit(connection, new StatsMessage { Data = stats });
                 break;
 
             case MsgID.MSG_LOG:
-                Emit(connection, new RawLogMessage { Level = (LogLevel)payload[0], Text = Encoding.UTF8.GetString(payload.Slice(1)) });
+                if (payload.Length > 0)
+                    Emit(connection, new RawLogMessage { Level = (ProtocolLogLevel)payload[0], Text = Encoding.UTF8.GetString(payload.Slice(1)) });
                 break;
 
             case MsgID.MSG_CONFIG_SET:
             case MsgID.MSG_CONFIG_GET:
             case MsgID.MSG_CONFIG_REP:
-                Emit(connection, new ConfigMessage { Data = MemoryMarshal.Read<ConfigPacket>(payload) });
+                if (TryReadStruct(payload, out ConfigPacket config))
+                    Emit(connection, new ConfigMessage { Data = config });
                 break;
 
             case MsgID.MSG_CONFIG_SYNC_REP:
-                Emit(connection, new FullConfigMessage { Data = MemoryMarshal.Read<FullConfigPacket>(payload) });
+                if (TryReadStruct(payload, out FullConfigPacket fullConfig))
+                    Emit(connection, new FullConfigMessage { Data = fullConfig });
                 break;
 
             case MsgID.MSG_ACK:
-                Emit(connection, HandleAck(payload));
+                Emit(connection, HandleAck(connection, payload));
                 break;
 
             case MsgID.MSG_LINK_HEALTH:
-                Emit(connection, new LinkHealthMessage { Data = MemoryMarshal.Read<LinkHealthPacket>(payload) });
+                if (TryReadStruct(payload, out LinkHealthPacket linkHealth))
+                    Emit(connection, new LinkHealthMessage { Data = linkHealth });
                 break;
 
             case MsgID.MSG_REQ_LINK_HEALTH:
@@ -162,13 +134,27 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
                 break;
 
             case MsgID.MSG_BMS_EXT:
-                Emit(connection, new BmsExtMessage { Data = MemoryMarshal.Read<BmsExtPacket>(payload) });
+                if (TryReadStruct(payload, out BmsExtPacket bmsExt))
+                    Emit(connection, new BmsExtMessage { Data = bmsExt });
                 break;
 
             default:
                 // Unknown msgID — silently ignore (NЕ создаем новых MsgID!)
                 break;
         }
+    }
+
+    private static bool TryReadStruct<T>(ReadOnlySpan<byte> payload, out T value)
+        where T : struct
+    {
+        if (payload.Length < Marshal.SizeOf<T>())
+        {
+            value = default;
+            return false;
+        }
+
+        value = MemoryMarshal.Read<T>(payload);
+        return true;
     }
 
     private void Emit(ShuttleConnection connection, ShuttleMessageBase message)
@@ -179,10 +165,11 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
     // Обработка ACK_TELEM (compound: AckPacket + TelemetryPacket)
     private void HandleAckTelem(ShuttleConnection connection, ReadOnlySpan<byte> payload)
     {
-        var ackTelem = MemoryMarshal.Read<AckTelemPacket>(payload);
+        if (!TryReadStruct(payload, out AckTelemPacket ackTelem))
+            return;
 
         // Process the ACK part
-        if (_ackWaiters.TryRemove(ackTelem.Ack.RefSeq, out var tcs))
+        if (connection.AckWaiters.TryRemove(ackTelem.Ack.RefSeq, out var tcs))
             tcs.TrySetResult(ackTelem.Ack.Result == AckResult.ACK_OK);
 
         // Emit both messages
@@ -191,32 +178,15 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
     }
 
     // Обработка ACK
-    private AckMessage HandleAck(ReadOnlySpan<byte> payload)
+    private AckMessage HandleAck(ShuttleConnection connection, ReadOnlySpan<byte> payload)
     {
-        var ackData = MemoryMarshal.Read<AckPacket>(payload);
-        if (_ackWaiters.TryRemove(ackData.RefSeq, out var tcs))
+        if (!TryReadStruct(payload, out AckPacket ackData))
+            return new AckMessage();
+
+        if (connection.AckWaiters.TryRemove(ackData.RefSeq, out var tcs))
             tcs.TrySetResult(ackData.Result == 0);
 
         return new AckMessage { Data = ackData };
-    }
-
-    // CRC16 CCITT
-    private static ushort Crc16Ccitt(ReadOnlySpan<byte> data)
-    {
-        ushort crc = 0xFFFF;
-        foreach (byte b in data)
-        {
-            crc ^= (ushort)(b << 8);
-            for (int i = 0; i < 8; i++)
-            {
-                if ((crc & 0x8000) != 0)
-                    crc = (ushort)((crc << 1) ^ 0x1021);
-                else
-                    crc <<= 1;
-            }
-        }
-
-        return crc;
     }
 
     private async Task<bool> SendPacketAsync<TPayload>(
@@ -229,58 +199,35 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         if (connection.Transport == null)
             return false;
 
-        byte seq = connection.NextSeq++;
+        byte seq = connection.AllocateSeq();
 
-        int payloadSize = Marshal.SizeOf<TPayload>();
+        byte[] frame = BinaryFrameCodec.BuildFrame(msgId, ProtocolConstants.TARGET_ID_NONE, seq, in payload);
 
-        const int headerSize = 6;
-        const int crcSize = 2;
-
-        int frameSize = headerSize + payloadSize + crcSize;
-
-        byte[] frame = new byte[frameSize];
-
-        // Header
-        frame[0] = PROTOCOL_SYNC_1_V2;
-        frame[1] = PROTOCOL_SYNC_2_V2;
-        frame[2] = (byte)msgId;
-        frame[3] = ProtocolConstants.TARGET_ID_NONE;
-        frame[4] = seq;
-        frame[5] = (byte)payloadSize;
-
-        // Payload
-        MemoryMarshal.Write(frame.AsSpan(headerSize, payloadSize), in payload);
-
-        // CRC
-        ushort crc = Crc16Ccitt(frame.AsSpan(0, headerSize + payloadSize));
-        BinaryPrimitives.WriteUInt16LittleEndian(
-            frame.AsSpan(headerSize + payloadSize, 2),
-            crc);
+        // RunContinuationsAsynchronously: ACK приходит из receive-потока, продолжение не должно блокировать его.
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.AckWaiters[seq] = tcs;
 
         try
         {
-            var tcs = new TaskCompletionSource<bool>();
-            _ackWaiters[seq] = tcs;
-
-            var cts = new CancellationTokenSource(timeoutMs);
-
-            cts.Token.Register(() =>
-            {
-                if (_ackWaiters.TryRemove(seq, out var pending))
-                    pending.TrySetResult(false);
-            });
-
-            Debug.WriteLine($"command {frame}");
+            _logger.LogDebug("Отправка кадра {MsgId} (seq={Seq}, payload={PayloadSize})", msgId, seq, frame.Length - 8);
             await connection.Transport.WriteAsync(frame, CancellationToken.None);
             await connection.Transport.FlushAsync(CancellationToken.None);
-
-            return await tcs.Task;
         }
         catch
         {
-            _ackWaiters.TryRemove(seq, out _);
+            connection.AckWaiters.TryRemove(seq, out _);
             return false;
         }
+
+        Task completed = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
+        if (completed != tcs.Task)
+        {
+            // Таймаут: убираем waiter, чтобы поздний ACK не утёк в словарь навсегда.
+            connection.AckWaiters.TryRemove(seq, out _);
+            return false;
+        }
+
+        return await tcs.Task;
     }
 
     public Task<bool> SendConfigSetAsync(
@@ -381,31 +328,9 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         if (connection.Transport == null)
             return false;
 
-        byte seq = connection.NextSeq++;
+        byte seq = connection.AllocateSeq();
 
-        int payloadSize = Marshal.SizeOf<TPayload>();
-        const int headerSize = 6;
-        const int crcSize = 2;
-        int frameSize = headerSize + payloadSize + crcSize;
-
-        byte[] frame = new byte[frameSize];
-
-        // Header
-        frame[0] = PROTOCOL_SYNC_1_V2;
-        frame[1] = PROTOCOL_SYNC_2_V2;
-        frame[2] = (byte)msgId;
-        frame[3] = ProtocolConstants.TARGET_ID_NONE;
-        frame[4] = seq;
-        frame[5] = (byte)payloadSize;
-
-        // Payload
-        MemoryMarshal.Write(frame.AsSpan(headerSize, payloadSize), in payload);
-
-        // CRC
-        ushort crc = Crc16Ccitt(frame.AsSpan(0, headerSize + payloadSize));
-        BinaryPrimitives.WriteUInt16LittleEndian(
-            frame.AsSpan(headerSize + payloadSize, 2),
-            crc);
+        byte[] frame = BinaryFrameCodec.BuildFrame(msgId, ProtocolConstants.TARGET_ID_NONE, seq, in payload);
 
         try
         {

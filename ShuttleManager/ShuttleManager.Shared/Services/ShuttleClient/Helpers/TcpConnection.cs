@@ -2,7 +2,7 @@
 
 namespace ShuttleManager.Shared.Services.ShuttleClient.Helpers;
 
-public class TcpConnection : IDisposable
+public class TcpConnection : ITransport
 {
     private readonly TcpClient _client;
     private readonly NetworkStream _stream;

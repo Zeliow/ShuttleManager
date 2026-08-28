@@ -806,7 +806,7 @@ public partial class ShuttleHubControlComponent : ComponentBase, IAsyncDisposabl
         }
         else
         {
-            HubClientService.DisconnectFromShuttle(Shuttle.IPAddress);
+            await HubClientService.DisconnectAsync(Shuttle.IPAddress);
             LogToTerminal("[INFO] Запрошено отключение\n");
             await OnDisconnected.InvokeAsync(Shuttle.IPAddress);
         }

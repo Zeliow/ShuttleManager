@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using ShuttleManager.Services;
 using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Services.OtaUpdate;
@@ -17,6 +18,10 @@ public static class MauiProgram
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
+
+        using Stream appSettings = FileSystem.OpenAppPackageFileAsync("appsettings.json").GetAwaiter().GetResult();
+        builder.Configuration.AddJsonStream(appSettings);
+        builder.Services.Configure<ShuttleOptions>(builder.Configuration.GetSection(ShuttleOptions.SectionName));
 
         builder.Services.AddSingleton<IShuttleHubClientService, ShuttleHubClientService>();
         builder.Services.AddSingleton<IFilePickerService, FilePickerService>();
