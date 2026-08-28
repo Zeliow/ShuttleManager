@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Models.Messages;
 using ShuttleManager.Shared.Models.Protocol;
@@ -16,13 +17,18 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
 {
     private readonly ProtocolCallbacks _callbacks;
     private readonly ILogger<LegacyProtocolHandler> _logger;
+    private readonly ShuttleOptions _options;
 
     public ShuttleProtocolType Protocol => ShuttleProtocolType.Legacy;
 
-    public LegacyProtocolHandler(ProtocolCallbacks callbacks, ILogger<LegacyProtocolHandler>? logger = null)
+    public LegacyProtocolHandler(
+        ProtocolCallbacks callbacks,
+        ILogger<LegacyProtocolHandler>? logger = null,
+        IOptions<ShuttleOptions>? options = null)
     {
         _callbacks = callbacks;
         _logger = logger ?? NullLogger<LegacyProtocolHandler>.Instance;
+        _options = options?.Value ?? new ShuttleOptions();
     }
 
     // Разбор буфера Legacy (строковый протокол)
@@ -104,7 +110,11 @@ public class LegacyProtocolHandler : IShuttleProtocolHandler
         _logger.LogInformation("Отправка конфигурации {ShuttleId}: {Command}", connection.ShuttleId, text);
 
         if (param == ShuttleConfigCommand.ShuttleNumber)
-            connection.ShuttleId = Convert.ToString(value);
+        {
+            // Номер задан явно (буквенно-цифровой формат из конфигурации) —
+            // он должен пережить реконнект, а IP сменится на привязанный к новому номеру.
+            connection.ApplyShuttleNumberChange(value, _options);
+        }
 
         return await SendPacketAsync(connection, text, CancellationToken.None);
     }

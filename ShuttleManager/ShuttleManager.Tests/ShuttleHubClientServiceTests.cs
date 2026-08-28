@@ -125,4 +125,69 @@ public class ShuttleHubClientServiceTests
         await service.DisconnectAsync("127.0.0.1");
         listener.Stop();
     }
+
+    [Fact]
+    public async Task ConcurrentConnectCalls_OpenOnlyOneTcpConnection()
+    {
+        TcpListener listener = StartListener(out int port);
+        using var service = new ShuttleHubClientService();
+
+        var accepted = new List<TcpClient>();
+        var acceptLock = new object();
+        using var acceptCts = new CancellationTokenSource();
+        Task acceptLoop = Task.Run(async () =>
+        {
+            while (!acceptCts.IsCancellationRequested)
+            {
+                try
+                {
+                    TcpClient client = await listener.AcceptTcpClientAsync(acceptCts.Token);
+                    lock (acceptLock)
+                    {
+                        accepted.Add(client);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (SocketException)
+                {
+                    break;
+                }
+            }
+        });
+
+        try
+        {
+            // Два параллельных клика «Подключить» — ConnectGate должен сериализовать попытки.
+            Task<bool> first = service.ConnectToShuttleAsync("127.0.0.1", port);
+            Task<bool> second = service.ConnectToShuttleAsync("127.0.0.1", port);
+
+            bool[] results = await Task.WhenAll(first, second);
+
+            Assert.Contains(true, results);
+
+            // Даём accept-циклу время на приём всех (лишних) соединений.
+            await Task.Delay(500);
+
+            lock (acceptLock)
+            {
+                Assert.True(accepted.Count == 1, $"Ожидалось 1 принятое соединение, получено {accepted.Count}");
+            }
+        }
+        finally
+        {
+            acceptCts.Cancel();
+            await service.DisconnectAsync("127.0.0.1");
+            listener.Stop();
+            lock (acceptLock)
+            {
+                foreach (TcpClient client in accepted)
+                {
+                    client.Dispose();
+                }
+            }
+        }
+    }
 }

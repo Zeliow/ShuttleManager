@@ -43,6 +43,12 @@ public class ShuttleOptions
 
     public int WatchdogTimeoutMs { get; set; } = 15000;
 
+    /// <summary>Автоматически отправлять перезагрузку контроллера после сохранения изменённого номера шаттла.</summary>
+    public bool AutoRebootAfterIdSave { get; set; } = true;
+
+    /// <summary>Задержка перед авто-перезагрузкой (дать EEPROM завершить запись), мс.</summary>
+    public int AutoRebootDelayMs { get; set; } = 800;
+
     public int ScanTimeoutMs { get; set; } = 1000;
 
     public int ScanMaxParallelism { get; set; } = 32;
@@ -61,6 +67,38 @@ public class ShuttleOptions
             ],
         },
     ];
+
+    /// <summary>
+    /// Определяет идентификатор шаттла (буквенно-цифровое выражение вида "A1", "B2")
+    /// по его числовому номеру. Формат важен: legacy-команды начинаются с префикса этого номера.
+    /// </summary>
+    public string GetShuttleIdByNumber(int number)
+    {
+        foreach (IpToIdRule rule in IdRules)
+        {
+            int index = number - 1;
+            if (index >= 0 && index < rule.Ids.Count)
+                return rule.Ids[index];
+        }
+
+        return number.ToString();
+    }
+
+    /// <summary>
+    /// Определяет ожидаемый IP-адрес шаттла по его числовому номеру:
+    /// адрес жёстко привязан к номеру как BaseIp.(StartOctet + number).
+    /// Возвращает null, если текущий IP не принадлежит ни одному правилу.
+    /// </summary>
+    public string? GetIpAddressByNumber(string currentIpAddress, int number)
+    {
+        foreach (IpToIdRule rule in IdRules)
+        {
+            if (currentIpAddress.StartsWith(rule.BaseIp + ".", StringComparison.Ordinal))
+                return $"{rule.BaseIp}.{rule.StartOctet + number}";
+        }
+
+        return null;
+    }
 
     /// <summary>Определяет идентификатор шаттла по IP-адресу.</summary>
     public string ResolveShuttleId(string ipAddress)

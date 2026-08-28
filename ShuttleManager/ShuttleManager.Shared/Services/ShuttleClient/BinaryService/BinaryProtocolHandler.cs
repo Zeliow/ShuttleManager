@@ -2,6 +2,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using ShuttleManager.Shared.Interfaces;
 using ShuttleManager.Shared.Models;
 using ShuttleManager.Shared.Models.Messages;
@@ -18,13 +19,18 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
 {
     private readonly ProtocolCallbacks _callbacks;
     private readonly ILogger<BinaryProtocolHandler> _logger;
+    private readonly ShuttleOptions _options;
 
     public ShuttleProtocolType Protocol => ShuttleProtocolType.Binary;
 
-    public BinaryProtocolHandler(ProtocolCallbacks callbacks, ILogger<BinaryProtocolHandler>? logger = null)
+    public BinaryProtocolHandler(
+        ProtocolCallbacks callbacks,
+        ILogger<BinaryProtocolHandler>? logger = null,
+        IOptions<ShuttleOptions>? options = null)
     {
         _callbacks = callbacks;
         _logger = logger ?? NullLogger<BinaryProtocolHandler>.Instance;
+        _options = options?.Value ?? new ShuttleOptions();
     }
 
     // Обработка входящего буфера
@@ -275,10 +281,19 @@ public class BinaryProtocolHandler : IShuttleProtocolHandler
         }
     }
 
-    public Task<bool> SendConfigAsync(ShuttleConnection connection, ShuttleConfigCommand param, int value, int timeoutMs = 1000)
+    public async Task<bool> SendConfigAsync(ShuttleConnection connection, ShuttleConfigCommand param, int value, int timeoutMs = 1000)
     {
         var cmd = BinaryConfigMapper.Map(param);
-        return SendConfigSetAsync(connection, cmd, value, timeoutMs);
+        bool result = await SendConfigSetAsync(connection, cmd, value, timeoutMs);
+
+        if (result && param == ShuttleConfigCommand.ShuttleNumber)
+        {
+            // Номер задан явно (буквенно-цифровой формат из конфигурации) —
+            // он должен пережить реконнект, а IP сменится на привязанный к новому номеру.
+            connection.ApplyShuttleNumberChange(value, _options);
+        }
+
+        return result;
     }
 
     public Task<bool> SendDateTimeAsync(ShuttleConnection connection, DateTime utcTime, int timeoutMs = 1000)

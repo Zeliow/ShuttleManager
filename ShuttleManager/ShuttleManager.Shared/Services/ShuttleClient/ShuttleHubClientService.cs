@@ -42,6 +42,36 @@ public class ShuttleConnection
     /// <summary>Флаг явного отключения пользователем — останавливает авто-реконнект.</summary>
     public bool UserDisconnectRequested { get; set; }
 
+    /// <summary>True, если номер шаттла был задан явно (изменён через конфигурацию) — при реконнекте не пересчитывать из IP.</summary>
+    public bool ShuttleIdFromConfig { get; set; }
+
+    /// <summary>Сериализует попытки TCP-подключения (ручные и фоновые) — исключает двойные каналы.</summary>
+    public readonly SemaphoreSlim ConnectGate = new(1, 1);
+
+    /// <summary>CTS текущей попытки TCP-подключения — позволяет прервать зависший ConnectAsync.</summary>
+    public CancellationTokenSource? ConnectAttemptCts { get; set; }
+
+    /// <summary>Прогнозируемый новый IP шаттла после смены его номера (номер жёстко привязан к IP).</summary>
+    public string? PendingIpAddress { get; set; }
+
+    /// <summary>True, если сохранение номера в EEPROM выполнено — ожидаем перезагрузку контроллера и смену IP.</summary>
+    public bool ExpectIpChangeAfterReboot { get; set; }
+
+    /// <summary>
+    /// Применяет смену номера шаттла: обновляет буквенно-цифровой ID и прогнозирует новый IP.
+    /// </summary>
+    public void ApplyShuttleNumberChange(int number, ShuttleOptions options)
+    {
+        ShuttleId = options.GetShuttleIdByNumber(number);
+        ShuttleIdFromConfig = true;
+
+        string? predicted = options.GetIpAddressByNumber(IpAddress, number);
+        PendingIpAddress = !string.IsNullOrEmpty(predicted) &&
+                           !string.Equals(predicted, IpAddress, StringComparison.OrdinalIgnoreCase)
+            ? predicted
+            : null;
+    }
+
     private readonly object _seqLock = new();
     private byte _nextSeq;
 
@@ -102,8 +132,8 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             OnMessage = (ip, msg) => OnLogReceived(ip, msg),
         };
 
-        _binaryHandler = new BinaryProtocolHandler(_protocolCallbacks, factory.CreateLogger<BinaryProtocolHandler>());
-        _legacyHandler = new LegacyProtocolHandler(_protocolCallbacks, factory.CreateLogger<LegacyProtocolHandler>());
+        _binaryHandler = new BinaryProtocolHandler(_protocolCallbacks, factory.CreateLogger<BinaryProtocolHandler>(), options);
+        _legacyHandler = new LegacyProtocolHandler(_protocolCallbacks, factory.CreateLogger<LegacyProtocolHandler>(), options);
 
         _watchdogTask = Task.Run(WatchdogLoopAsync);
     }
@@ -189,15 +219,22 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         {
             if (_connections.TryGetValue(ipAddress, out ShuttleConnection? existing))
             {
-                if (existing.State is ConnectionState.Connected or ConnectionState.Connecting)
+                if (existing.State == ConnectionState.Connected)
                 {
                     _logger.LogDebug("Подключение к {Ip} уже существует (State={State})", ipAddress, existing.State);
-                    return existing.State == ConnectionState.Connected;
+                    return true;
+                }
+
+                if (existing.State == ConnectionState.Connecting)
+                {
+                    // Прерываем текущую попытку (фоновую или ручную) — управление берёт этот вызов.
+                    _logger.LogDebug("Прерываем текущую попытку подключения к {Ip} для ручного переподключения", ipAddress);
+                    existing.ConnectAttemptCts?.Cancel();
+                    existing.ReconnectCts?.Cancel();
                 }
 
                 // Переиспользуем объект после неудачной попытки/дисконнекта.
                 connection = existing;
-                connection.ReconnectCts?.Cancel();
             }
             else
             {
@@ -214,83 +251,130 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
     private async Task<bool> ConnectInternalAsync(ShuttleConnection connection, bool reconnectAttempt)
     {
-        lock (_lock)
-        {
-            if (connection.State == ConnectionState.Disconnecting)
-                return false;
-
-            connection.State = ConnectionState.Connecting;
-        }
-
-        var tcpClient = new TcpClient();
+        // Сериализация с авто-реконнектом и ручными подключениями:
+        // ручная попытка дожидается завершения фоновой и не создаёт второй TCP-канал.
+        await connection.ConnectGate.WaitAsync();
         try
         {
-            _logger.LogDebug("Старт TCP подключения к {Ip}:{Port}", connection.IpAddress, connection.Port);
-
-            using var connectCts = new CancellationTokenSource(_options.ConnectTimeoutMs);
-            await tcpClient.ConnectAsync(connection.IpAddress, connection.Port, connectCts.Token);
-
-            // За время подключения пользователь мог отключиться или начать новое подключение.
-            if (connection.ReconnectCts?.IsCancellationRequested == true ||
-                connection.UserDisconnectRequested ||
-                connection.State == ConnectionState.Disconnecting)
-            {
-                _logger.LogDebug(
-                    "Подключение к {Ip} прервано: ReconnectCancelled={R}, UserDisconnect={U}, State={S}",
-                    connection.IpAddress,
-                    connection.ReconnectCts?.IsCancellationRequested,
-                    connection.UserDisconnectRequested,
-                    connection.State);
-                tcpClient.Dispose();
-                return false;
-            }
-
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, _options.KeepAliveTimeSeconds);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, _options.KeepAliveIntervalSeconds);
-            tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, _options.KeepAliveRetryCount);
-
-            connection.ShuttleId = _options.ResolveShuttleId(connection.IpAddress);
-            connection.Transport = new TcpConnection(tcpClient);
-            connection.Protocol = ShuttleProtocolType.Unknown;
-            connection.Handler = null;
-            connection.ReceiveBuffer.SetLength(0);
-            connection.LastActivity = DateTime.UtcNow;
-
             lock (_lock)
             {
-                if (_connections.TryGetValue(connection.IpAddress, out ShuttleConnection? current) &&
-                    !ReferenceEquals(current, connection))
+                if (connection.State == ConnectionState.Connected)
+                    return true;
+
+                if (connection.State == ConnectionState.Disconnecting)
+                    return false;
+
+                connection.State = ConnectionState.Connecting;
+            }
+
+            var tcpClient = new TcpClient();
+            using var attemptCts = new CancellationTokenSource(_options.ConnectTimeoutMs);
+            lock (_lock)
+            {
+                connection.ConnectAttemptCts = attemptCts;
+            }
+
+            try
+            {
+                _logger.LogDebug("Старт TCP подключения к {Ip}:{Port}", connection.IpAddress, connection.Port);
+
+                await tcpClient.ConnectAsync(connection.IpAddress, connection.Port, attemptCts.Token);
+
+                // За время подключения пользователь мог отключиться или начать новое подключение.
+                // Для фоновой попытки учитываем отмену цикла реконнекта, для ручной — только явные действия пользователя.
+                if ((reconnectAttempt && connection.ReconnectCts?.IsCancellationRequested == true) ||
+                    connection.UserDisconnectRequested ||
+                    connection.State == ConnectionState.Disconnecting)
                 {
-                    // Пользователь уже создал новое подключение — этот канал не нужен.
+                    _logger.LogDebug(
+                        "Подключение к {Ip} прервано: ReconnectCancelled={R}, UserDisconnect={U}, State={S}",
+                        connection.IpAddress,
+                        connection.ReconnectCts?.IsCancellationRequested,
+                        connection.UserDisconnectRequested,
+                        connection.State);
                     tcpClient.Dispose();
-                    connection.Transport = null;
                     return false;
                 }
 
-                _connections[connection.IpAddress] = connection;
-                connection.State = ConnectionState.Connected;
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, _options.KeepAliveTimeSeconds);
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, _options.KeepAliveIntervalSeconds);
+                tcpClient.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, _options.KeepAliveRetryCount);
+
+                // Номер, заданный явно (изменённый через конфигурацию), переживает реконнект;
+                // иначе вычисляем его из IP по правилам маппинга.
+                connection.ShuttleId = connection.ShuttleIdFromConfig
+                    ? connection.ShuttleId
+                    : _options.ResolveShuttleId(connection.IpAddress);
+
+                connection.Transport = new TcpConnection(tcpClient);
+                connection.Protocol = ShuttleProtocolType.Unknown;
+                connection.Handler = null;
+                connection.ReceiveBuffer.SetLength(0);
+                connection.LastActivity = DateTime.UtcNow;
+
+                lock (_lock)
+                {
+                    if (_connections.TryGetValue(connection.IpAddress, out ShuttleConnection? current) &&
+                        !ReferenceEquals(current, connection))
+                    {
+                        // Пользователь уже создал новое подключение — этот канал не нужен.
+                        tcpClient.Dispose();
+                        connection.Transport = null;
+                        return false;
+                    }
+
+                    _connections[connection.IpAddress] = connection;
+                    connection.State = ConnectionState.Connected;
+                }
+
+                _logger.LogInformation("Подключение к {Ip}:{Port} установлено (ShuttleId={ShuttleId})", connection.IpAddress, connection.Port, connection.ShuttleId);
+
+                OnConnected(connection.IpAddress, connection.ShuttleId);
+
+                connection.ReceiveCts = new CancellationTokenSource();
+                connection.ReceiveTask = Task.Run(
+                    async () =>
+                    await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
+
+                return true;
             }
+            catch (OperationCanceledException) when (attemptCts.IsCancellationRequested)
+            {
+                tcpClient.Dispose();
+                _logger.LogDebug(
+                    "Попытка подключения к {Ip} прервана (таймаут {Timeout} мс или ручная отмена)",
+                    connection.IpAddress,
+                    _options.ConnectTimeoutMs);
+                lock (_lock)
+                {
+                    if (connection.State == ConnectionState.Connecting)
+                        connection.State = ConnectionState.Disconnected;
+                }
 
-            _logger.LogInformation("Подключение к {Ip}:{Port} установлено (ShuttleId={ShuttleId})", connection.IpAddress, connection.Port, connection.ShuttleId);
-
-            OnConnected(connection.IpAddress, connection.ShuttleId);
-
-            connection.ReceiveCts = new CancellationTokenSource();
-            connection.ReceiveTask = Task.Run(
-                async () =>
-                await ReceiveLoopAsync(connection, connection.ReceiveCts.Token), connection.ReceiveCts.Token);
-
-            return true;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                tcpClient.Dispose();
+                _logger.LogError(ex, "Ошибка подключения к {Ip}:{Port}", connection.IpAddress, connection.Port);
+                await InternalDisconnectAsync(connection.IpAddress, awaitReceiveTask: false);
+                if (!reconnectAttempt)
+                    connection.ReconnectCts?.Cancel();
+                return false;
+            }
+            finally
+            {
+                lock (_lock)
+                {
+                    if (ReferenceEquals(connection.ConnectAttemptCts, attemptCts))
+                        connection.ConnectAttemptCts = null;
+                }
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            tcpClient.Dispose();
-            _logger.LogError(ex, "Ошибка подключения к {Ip}:{Port}", connection.IpAddress, connection.Port);
-            await InternalDisconnectAsync(connection.IpAddress, awaitReceiveTask: false);
-            if (!reconnectAttempt)
-                connection.ReconnectCts?.Cancel();
-            return false;
+            connection.ConnectGate.Release();
         }
     }
 
@@ -367,6 +451,10 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
 
         try
         {
+            // После смены номера + сохранения контроллер перезагрузился с новым IP —
+            // переключаем цель реконнекта на прогнозируемый адрес.
+            ApplyPendingIpChange(connection);
+
             while (!connection.ReconnectCts.IsCancellationRequested && !connection.UserDisconnectRequested)
             {
                 if (_options.MaxReconnectAttempts >= 0 && connection.ReconnectAttempt >= _options.MaxReconnectAttempts)
@@ -408,6 +496,46 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             {
                 connection.ReconnectRunning = false;
             }
+        }
+    }
+
+    /// <summary>
+    /// Если ожидается смена IP после перезагрузки — переключает цель реконнекта
+    /// с текущего адреса соединения на прогнозируемый.
+    /// </summary>
+    private void ApplyPendingIpChange(ShuttleConnection connection)
+    {
+        lock (_lock)
+        {
+            if (!connection.ExpectIpChangeAfterReboot || string.IsNullOrEmpty(connection.PendingIpAddress))
+                return;
+
+            string oldIp = connection.IpAddress;
+            string newIp = connection.PendingIpAddress;
+
+            connection.ExpectIpChangeAfterReboot = false;
+            connection.PendingIpAddress = null;
+
+            if (string.Equals(oldIp, newIp, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (_connections.TryGetValue(newIp, out ShuttleConnection? existing) && !ReferenceEquals(existing, connection))
+            {
+                // Новый IP уже занят другим (живым) соединением — не конфликтуем, гасим цикл.
+                _logger.LogWarning("IP {NewIp} уже занят другим соединением — авто-реконнект после смены номера отменён", newIp);
+                connection.ReconnectCts?.Cancel();
+                return;
+            }
+
+            _connections.Remove(oldIp);
+            connection.IpAddress = newIp;
+            _connections[newIp] = connection;
+
+            _logger.LogInformation(
+                "Шаттл сменил IP после смены номера: {OldIp} -> {NewIp} (ShuttleId={ShuttleId})",
+                oldIp,
+                newIp,
+                connection.ShuttleId);
         }
     }
 
@@ -505,7 +633,52 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
         if (conn.Handler == null)
             return false;
 
-        return await conn.Handler.SendCommandAsync(conn, command, arg1, arg2, CancellationToken.None, _options.AckTimeoutMs);
+        bool result = await conn.Handler.SendCommandAsync(conn, command, arg1, arg2, CancellationToken.None, _options.AckTimeoutMs);
+
+        if (result && command == ShuttleCommand.SaveConfig)
+        {
+            bool expectIpChange;
+            lock (_lock)
+            {
+                expectIpChange = conn.PendingIpAddress != null;
+                if (expectIpChange)
+                    conn.ExpectIpChangeAfterReboot = true;
+            }
+
+            if (expectIpChange && _options.AutoRebootAfterIdSave)
+                ScheduleAutoReboot(conn);
+        }
+
+        return result;
+    }
+
+    /// <summary>После сохранения изменённого номера в EEPROM — отправляем перезагрузку контроллера с задержкой.</summary>
+    private void ScheduleAutoReboot(ShuttleConnection connection)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(_options.AutoRebootDelayMs);
+
+                IShuttleProtocolHandler? handler = connection.Handler;
+                if (handler != null && connection.Transport?.IsConnected == true)
+                {
+                    _logger.LogInformation("Отправка перезагрузки контроллера {Ip} после сохранения номера...", connection.IpAddress);
+                    await handler.SendCommandAsync(
+                        connection,
+                        ShuttleCommand.SystemReset,
+                        0,
+                        0,
+                        CancellationToken.None,
+                        _options.AckTimeoutMs);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Ошибка авто-перезагрузки {Ip}", connection.IpAddress);
+            }
+        });
     }
 
     public async Task<bool> SendConfigAsync(
@@ -554,6 +727,7 @@ public class ShuttleHubClientService : IShuttleHubClientService, IDisposable
             {
                 connection.UserDisconnectRequested = true;
                 connection.ReconnectCts?.Cancel();
+                connection.ConnectAttemptCts?.Cancel();
             }
         }
 
